@@ -14,6 +14,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 from transformers import (
+    DistilBertConfig,
     DistilBertForSequenceClassification,
     DistilBertModel,
     DistilBertTokenizerFast,
@@ -25,10 +26,17 @@ class CTAContrastiveModel(nn.Module):
     """DistilBERT with projection head for contrastive learning."""
 
     def __init__(
-        self, model_name="distilbert-base-uncased", embed_dim=128, num_labels=None
+        self,
+        embed_dim=128,
+        num_labels=None,
+        config=None,
     ):
         super().__init__()
-        self.encoder = DistilBertModel.from_pretrained(model_name)
+        # Use provided config (fast, no network) or default
+        if config is None:
+            config = DistilBertConfig()
+        self.encoder = DistilBertModel(config)
+
         hidden_size = self.encoder.config.hidden_size
 
         self.projection = nn.Sequential(
@@ -92,8 +100,17 @@ class CTAClassifier:
                 str(self.model_dir), num_labels=len(self.classes)
             )
         else:  # contrastive or combined
+            # Load config from saved directory (fast, fully offline)
+            config_path = self.model_dir / "config.json"
+            if config_path.exists():
+                encoder_config = DistilBertConfig.from_pretrained(str(self.model_dir))
+            else:
+                encoder_config = DistilBertConfig()  # Use default if not saved
+
             self.model = CTAContrastiveModel(
-                embed_dim=self.embed_dim, num_labels=len(self.classes)
+                embed_dim=self.embed_dim,
+                num_labels=len(self.classes),
+                config=encoder_config,
             )
             self.model.load_state_dict(
                 torch.load(self.model_dir / "model.pt", map_location=self.device)
@@ -102,13 +119,16 @@ class CTAClassifier:
         self.model.to(self.device)
         self.model.eval()
 
-    def predict(self, text: str, top_k: int = 3) -> list[dict]:
+    def predict(
+        self, text: str, top_k: int = 3, threshold: float | None = None
+    ) -> list[dict]:
         """
         Predict column type for given text.
 
         Args:
             text: Format "column_name: value1, value2, value3"
             top_k: Number of top predictions to return
+            threshold: If set, returns "non_spatial" when top confidence < threshold
 
         Returns:
             List of dicts with 'label' and 'confidence'
@@ -134,10 +154,19 @@ class CTAClassifier:
             probs = F.softmax(logits, dim=-1)[0]
             top_probs, top_indices = torch.topk(probs, min(top_k, len(self.classes)))
 
-        return [
-            {"label": self.classes[idx], "confidence": prob.item()}
+        results = [
+            {"label": self.classes[idx], "confidence": prob}
             for idx, prob in zip(top_indices.tolist(), top_probs.tolist())
         ]
+
+        # If threshold set and top prediction is below it, prepend non_spatial
+        if threshold is not None and results[0]["confidence"] < threshold:
+            results.insert(
+                0,
+                {"label": "non_spatial", "confidence": 1.0 - results[0]["confidence"]},
+            )
+
+        return results
 
     def get_embedding(self, text: str) -> list[float]:
         """Get embedding vector for text (contrastive/combined modes only)."""
@@ -180,6 +209,12 @@ def main():
         "--top_k", type=int, default=3, help="Number of top predictions"
     )
     parser.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help="Confidence threshold; below this returns 'non_spatial' (e.g., 0.5)",
+    )
+    parser.add_argument(
         "--embedding",
         action="store_true",
         help="Return embedding instead of prediction",
@@ -202,9 +237,13 @@ def main():
         emb = classifier.get_embedding(text)
         print(f"Embedding ({len(emb)} dims): {emb[:5]}...")
     else:
-        predictions = classifier.predict(text, top_k=args.top_k)
+        predictions = classifier.predict(
+            text, top_k=args.top_k, threshold=args.threshold
+        )
         print(f"\nInput: {text}")
-        print(f"\nTop {args.top_k} predictions:")
+        if args.threshold:
+            print(f"Threshold: {args.threshold}")
+        print("\nTop predictions:")
         for i, pred in enumerate(predictions, 1):
             print(f"  {i}. {pred['label']}: {pred['confidence']:.4f}")
 

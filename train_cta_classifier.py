@@ -645,7 +645,7 @@ def main():
             args.output_dir,
         )
 
-    # Save label encoder mapping
+    # Save label encoder mapping and config
     os.makedirs(args.output_dir, exist_ok=True)
     with open(f"{args.output_dir}/label_encoder.json", "w") as f:
         json.dump(
@@ -657,6 +657,10 @@ def main():
             f,
             indent=2,
         )
+
+    # Save encoder config for fast offline loading (contrastive/combined modes)
+    if args.mode != "classification":
+        model.encoder.config.save_pretrained(args.output_dir)
 
     print(f"\n✅ Training complete! Model saved to {args.output_dir}")
 
