@@ -17,6 +17,7 @@ Usage:
 import argparse
 import json
 import os
+import random
 from pathlib import Path
 
 import numpy as np
@@ -29,19 +30,24 @@ from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import (
-    DistilBertForSequenceClassification,
-    DistilBertModel,
-    DistilBertTokenizerFast,
+    AutoModel,
+    AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
+
+# Model configuration
+MODEL_NAME = "BAAI/bge-small-en-v1.5"  # Strong embedding model, 33M params
+
+# Special tokens for structured input
+SPECIAL_TOKENS = {
+    "col_token": "[COL]",  # Marks column name
+    "val_token": "[VAL]",  # Marks values section
+}
 
 
 # ============================================================================
 # Data Loading
 # ============================================================================
-
-
-import random
 
 # Generic column names for masking augmentation
 GENERIC_NAMES = [
@@ -64,6 +70,98 @@ GENERIC_NAMES = [
     "x",
     "var",
 ]
+
+# ID-like column patterns that should be non_spatial (prevent confusion with coordinates)
+ID_COLUMN_PATTERNS = [
+    "PHYSICALID",
+    "physicalid",
+    "PhysicalId",
+    "OBJECTID",
+    "objectid",
+    "ObjectId",
+    "OID",
+    "FID",
+    "fid",
+    "Fid",
+    "index_right",
+    "index_left",
+    "INDEX",
+    "segmentid",
+    "SEGMENTID",
+    "SegmentId",
+    "segmentidt",
+    "record_id",
+    "RECORD_ID",
+    "RecordId",
+    "pk_id",
+    "PK_ID",
+    "primary_key",
+    "row_id",
+    "ROW_ID",
+    "RowId",
+    "ref_num",
+    "REF_NUM",
+    "reference_number",
+    "sequence",
+    "SEQUENCE",
+    "seq_num",
+    "feature_id",
+    "FEATURE_ID",
+    "FeatureId",
+]
+
+# Borough/district full names (should be borough_code)
+BOROUGH_NAME_PATTERNS = [
+    ("Borough Name", ["Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"]),
+    ("Borough", ["Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"]),
+    ("borough", ["manhattan", "brooklyn", "queens", "bronx", "staten island"]),
+    ("BOROUGH", ["MANHATTAN", "BROOKLYN", "QUEENS", "BRONX", "STATEN ISLAND"]),
+    ("district_name", ["Westminster", "Camden", "Islington", "Hackney"]),
+    ("ward_name", ["Shibuya", "Shinjuku", "Minato", "Chiyoda"]),
+    ("region", ["North Sydney", "Inner West", "Parramatta"]),
+]
+
+
+def generate_id_samples() -> pd.DataFrame:
+    """Generate non_spatial samples with ID-like patterns."""
+    samples = []
+    for name in ID_COLUMN_PATTERNS:
+        for _ in range(3):  # Multiple variations per pattern
+            # Generate ID-like values (large integers)
+            values = [random.randint(1000, 200000) for _ in range(3)]
+            samples.append(
+                {
+                    "name": name,
+                    "values": ", ".join(str(v) for v in values),
+                    "label": "non_spatial",
+                }
+            )
+            # Also with some variations
+            if random.random() < 0.5:
+                samples.append(
+                    {
+                        "name": f"{name}_{random.randint(1, 5)}",
+                        "values": ", ".join(str(v) for v in values),
+                        "label": "non_spatial",
+                    }
+                )
+    return pd.DataFrame(samples)
+
+
+def generate_borough_name_samples() -> pd.DataFrame:
+    """Generate borough_code samples with full borough names."""
+    samples = []
+    for name, values in BOROUGH_NAME_PATTERNS:
+        for _ in range(3):
+            random.shuffle(values)
+            samples.append(
+                {
+                    "name": name,
+                    "values": ", ".join(values[:3]),
+                    "label": "borough_code",
+                }
+            )
+    return pd.DataFrame(samples)
 
 
 def augment_with_masked_names(
@@ -107,8 +205,13 @@ def load_training_data(
     augment: bool = True,
     mask_ratio: float = 0.3,
     value_only_ratio: float = 0.15,
+    name_repeat: int = 3,
 ) -> pd.DataFrame:
-    """Load and combine curated + synthetic training data with optional augmentation."""
+    """Load and combine curated + synthetic training data with optional augmentation.
+
+    Args:
+        name_repeat: Number of times to repeat column name in text (emphasizes name).
+    """
     dfs = []
 
     if Path(curated_path).exists():
@@ -128,6 +231,16 @@ def load_training_data(
         dfs.append(synthetic[["name", "values", "label"]])
         print(f"Loaded {len(synthetic)} samples from {synthetic_path}")
 
+    # Add hardcoded ID samples (prevents confusion with coordinates)
+    id_samples = generate_id_samples()
+    dfs.append(id_samples)
+    print(f"Added {len(id_samples)} ID pattern samples (non_spatial)")
+
+    # Add borough name samples
+    borough_samples = generate_borough_name_samples()
+    dfs.append(borough_samples)
+    print(f"Added {len(borough_samples)} borough name samples")
+
     if not dfs:
         raise FileNotFoundError("No training data found!")
 
@@ -142,8 +255,30 @@ def load_training_data(
             f"Augmented: {original_len} → {len(df)} samples (+{len(df) - original_len})"
         )
 
-    df["text"] = df.apply(lambda r: f"{r['name']}: {r['values']}", axis=1)
-    print(f"Total training samples: {len(df)}")
+    # Create text with structured tokens
+    # Format: [COL] Borough [COL] Borough [VAL] Manhattan [VAL] Brooklyn
+    def make_text(row):
+        name = row["name"]
+        values = row["values"]
+        col_tok = SPECIAL_TOKENS["col_token"]
+        val_tok = SPECIAL_TOKENS["val_token"]
+
+        # Repeat column name with [COL] token for emphasis
+        if name_repeat > 1 and name:
+            col_parts = " ".join([f"{col_tok} {name}"] * name_repeat)
+        else:
+            col_parts = f"{col_tok} {name}" if name else ""
+
+        # Format values with [VAL] token
+        val_list = [v.strip() for v in str(values).split(",")]
+        val_parts = " ".join([f"{val_tok} {v}" for v in val_list[:10]])  # Limit values
+
+        return f"{col_parts} {val_parts}".strip()
+
+    df["text"] = df.apply(make_text, axis=1)
+    print(
+        f"Total training samples: {len(df)} (name_repeat={name_repeat}, structured tokens)"
+    )
     return df
 
 
@@ -270,14 +405,54 @@ class ContrastiveDataset(Dataset):
 # ============================================================================
 
 
-class CTAContrastiveModel(nn.Module):
-    """DistilBERT with projection head for contrastive learning."""
+class CTAClassificationModel(nn.Module):
+    """Simple classification model using any transformer encoder."""
 
-    def __init__(
-        self, model_name="distilbert-base-uncased", embed_dim=128, num_labels=None
-    ):
+    def __init__(self, model_name=None, num_labels=None, config=None):
         super().__init__()
-        self.encoder = DistilBertModel.from_pretrained(model_name)
+        model_name = model_name or MODEL_NAME
+
+        if config is not None:
+            self.encoder = AutoModel.from_config(config)
+        else:
+            self.encoder = AutoModel.from_pretrained(model_name)
+
+        hidden_size = self.encoder.config.hidden_size
+        self.classifier = nn.Linear(hidden_size, num_labels)
+        self.num_labels = num_labels
+
+    def forward(self, input_ids, attention_mask, labels=None):
+        outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
+        pooled = outputs.last_hidden_state[:, 0, :]  # [CLS] token
+        logits = self.classifier(pooled)
+
+        loss = None
+        if labels is not None:
+            loss = F.cross_entropy(logits, labels)
+
+        # Return object-like result for compatibility
+        class Output:
+            pass
+
+        out = Output()
+        out.loss = loss
+        out.logits = logits
+        return out
+
+
+class CTAContrastiveModel(nn.Module):
+    """Encoder with projection head for contrastive learning (supports BGE, BERT, etc.)."""
+
+    def __init__(self, model_name=None, embed_dim=128, num_labels=None, config=None):
+        super().__init__()
+        model_name = model_name or MODEL_NAME
+
+        # Load encoder from pretrained or config
+        if config is not None:
+            self.encoder = AutoModel.from_config(config)
+        else:
+            self.encoder = AutoModel.from_pretrained(model_name)
+
         hidden_size = self.encoder.config.hidden_size
 
         # Projection head for contrastive learning
@@ -444,7 +619,8 @@ def train_classification(
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            model.save_pretrained(output_dir)
+            os.makedirs(output_dir, exist_ok=True)
+            torch.save(model.state_dict(), f"{output_dir}/model.pt")
             print(f"  → Saved best model (acc={val_acc:.4f})")
 
     return model
@@ -673,6 +849,12 @@ def main():
         default=0.2,
         help="Online augmentation probability during training (0 to disable)",
     )
+    parser.add_argument(
+        "--name_repeat",
+        type=int,
+        default=3,
+        help="Repeat column name N times to emphasize it (default: 3)",
+    )
     args = parser.parse_args()
 
     # Set seeds
@@ -696,6 +878,7 @@ def main():
         args.synthetic_path,
         augment=not args.no_augment,
         mask_ratio=args.mask_ratio,
+        name_repeat=args.name_repeat,
     )
 
     # Encode labels
@@ -715,8 +898,13 @@ def main():
     )
     print(f"Train size: {len(train_texts)}, Val size: {len(val_texts)}")
 
-    # Tokenizer
-    tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+    # Tokenizer with special tokens
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    # Add custom tokens for structured input: [COL] column_name [VAL] value1 [VAL] value2
+    new_tokens = list(SPECIAL_TOKENS.values())
+    num_added = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
+    print(f"Using model: {MODEL_NAME}")
+    print(f"Added {num_added} special tokens: {new_tokens}")
 
     # Create datasets and loaders based on mode
     if args.mode == "classification":
@@ -729,9 +917,10 @@ def main():
         )
         val_ds = CTADataset(val_texts, val_labels, tokenizer, args.max_length)
 
-        model = DistilBertForSequenceClassification.from_pretrained(
-            "distilbert-base-uncased", num_labels=num_labels
-        )
+        model = CTAClassificationModel(num_labels=num_labels)
+        model.encoder.resize_token_embeddings(
+            len(tokenizer)
+        )  # Accommodate new special tokens
 
         train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
         val_loader = DataLoader(val_ds, batch_size=args.batch_size)
@@ -756,6 +945,9 @@ def main():
         val_ds = ContrastiveDataset(val_texts, val_labels, tokenizer, args.max_length)
 
         model = CTAContrastiveModel(embed_dim=args.embed_dim)
+        model.encoder.resize_token_embeddings(
+            len(tokenizer)
+        )  # Accommodate new special tokens
 
         train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
         val_loader = DataLoader(val_ds, batch_size=args.batch_size)
@@ -782,6 +974,9 @@ def main():
         val_ds = CTADataset(val_texts, val_labels, tokenizer, args.max_length)
 
         model = CTAContrastiveModel(embed_dim=args.embed_dim, num_labels=num_labels)
+        model.encoder.resize_token_embeddings(
+            len(tokenizer)
+        )  # Accommodate new special tokens
 
         train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
         val_loader = DataLoader(val_ds, batch_size=args.batch_size)
@@ -805,15 +1000,17 @@ def main():
             {
                 "classes": label_encoder.classes_.tolist(),
                 "mode": args.mode,
+                "model_name": MODEL_NAME,
                 "embed_dim": args.embed_dim if args.mode != "classification" else None,
+                "name_repeat": args.name_repeat,
+                "special_tokens": SPECIAL_TOKENS,  # Save token format
             },
             f,
             indent=2,
         )
 
-    # Save encoder config for fast offline loading (contrastive/combined modes)
-    if args.mode != "classification":
-        model.encoder.config.save_pretrained(args.output_dir)
+    # Save encoder config for fast offline loading
+    model.encoder.config.save_pretrained(args.output_dir)
 
     print(f"\n✅ Training complete! Model saved to {args.output_dir}")
 

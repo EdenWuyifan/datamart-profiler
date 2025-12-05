@@ -12,31 +12,33 @@ import json
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
-from transformers import (
-    DistilBertConfig,
-    DistilBertForSequenceClassification,
-    DistilBertModel,
-    DistilBertTokenizerFast,
-)
 import torch.nn as nn
+import torch.nn.functional as F
+from transformers import AutoConfig, AutoModel, AutoTokenizer
+
+
+class CTAClassificationModel(nn.Module):
+    """Simple classification model using any transformer encoder."""
+
+    def __init__(self, num_labels, config=None):
+        super().__init__()
+        self.encoder = AutoModel.from_config(config)
+        hidden_size = self.encoder.config.hidden_size
+        self.classifier = nn.Linear(hidden_size, num_labels)
+
+    def forward(self, input_ids, attention_mask, labels=None):
+        outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
+        pooled = outputs.last_hidden_state[:, 0, :]
+        logits = self.classifier(pooled)
+        return type("Output", (), {"logits": logits})()
 
 
 class CTAContrastiveModel(nn.Module):
-    """DistilBERT with projection head for contrastive learning."""
+    """Encoder with projection head for contrastive learning."""
 
-    def __init__(
-        self,
-        embed_dim=128,
-        num_labels=None,
-        config=None,
-    ):
+    def __init__(self, embed_dim=128, num_labels=None, config=None):
         super().__init__()
-        # Use provided config (fast, no network) or default
-        if config is None:
-            config = DistilBertConfig()
-        self.encoder = DistilBertModel(config)
-
+        self.encoder = AutoModel.from_config(config)
         hidden_size = self.encoder.config.hidden_size
 
         self.projection = nn.Sequential(
@@ -74,7 +76,10 @@ class CTAClassifier:
 
         self.classes = config["classes"]
         self.mode = config.get("mode", "classification")
+        self.model_name = config.get("model_name", "BAAI/bge-small-en-v1.5")
         self.embed_dim = config.get("embed_dim", 128)
+        self.name_repeat = config.get("name_repeat", 1)  # Name emphasis
+        self.special_tokens = config.get("special_tokens", {})  # [COL], [VAL] tokens
 
         # Device
         if torch.cuda.is_available():
@@ -84,40 +89,63 @@ class CTAClassifier:
         else:
             self.device = torch.device("cpu")
 
-        # Load tokenizer
+        # Load tokenizer (prefer saved, fallback to model_name)
         if (self.model_dir / "tokenizer_config.json").exists():
-            self.tokenizer = DistilBertTokenizerFast.from_pretrained(
-                str(self.model_dir)
-            )
+            self.tokenizer = AutoTokenizer.from_pretrained(str(self.model_dir))
         else:
-            self.tokenizer = DistilBertTokenizerFast.from_pretrained(
-                "distilbert-base-uncased"
-            )
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-        # Load model
+        # Load encoder config from saved directory
+        encoder_config = AutoConfig.from_pretrained(str(self.model_dir))
+
+        # Load model based on mode
         if self.mode == "classification":
-            self.model = DistilBertForSequenceClassification.from_pretrained(
-                str(self.model_dir), num_labels=len(self.classes)
+            self.model = CTAClassificationModel(
+                num_labels=len(self.classes),
+                config=encoder_config,
             )
         else:  # contrastive or combined
-            # Load config from saved directory (fast, fully offline)
-            config_path = self.model_dir / "config.json"
-            if config_path.exists():
-                encoder_config = DistilBertConfig.from_pretrained(str(self.model_dir))
-            else:
-                encoder_config = DistilBertConfig()  # Use default if not saved
-
             self.model = CTAContrastiveModel(
                 embed_dim=self.embed_dim,
                 num_labels=len(self.classes),
                 config=encoder_config,
             )
-            self.model.load_state_dict(
-                torch.load(self.model_dir / "model.pt", map_location=self.device)
-            )
+
+        # Load saved weights
+        self.model.load_state_dict(
+            torch.load(self.model_dir / "model.pt", map_location=self.device)
+        )
 
         self.model.to(self.device)
         self.model.eval()
+
+    def _format_input(self, text: str) -> str:
+        """Format input with special tokens: [COL] name [VAL] val1 [VAL] val2..."""
+        # Parse "name: val1, val2, val3" format
+        if ": " not in text:
+            return text
+
+        name, values = text.split(": ", 1)
+        col_tok = self.special_tokens.get("col_token", "")
+        val_tok = self.special_tokens.get("val_token", "")
+
+        # Format column name with repetition
+        if col_tok and name:
+            if self.name_repeat > 1:
+                col_parts = " ".join([f"{col_tok} {name}"] * self.name_repeat)
+            else:
+                col_parts = f"{col_tok} {name}"
+        else:
+            col_parts = name
+
+        # Format values with [VAL] token
+        if val_tok:
+            val_list = [v.strip() for v in str(values).split(",")]
+            val_parts = " ".join([f"{val_tok} {v}" for v in val_list[:10]])
+        else:
+            val_parts = values
+
+        return f"{col_parts} {val_parts}".strip()
 
     def predict(
         self, text: str, top_k: int = 3, threshold: float | None = None
@@ -133,6 +161,9 @@ class CTAClassifier:
         Returns:
             List of dicts with 'label' and 'confidence'
         """
+        # Apply structured formatting: [COL] name [VAL] val1 [VAL] val2
+        text = self._format_input(text)
+
         encoding = self.tokenizer(
             text,
             truncation=True,
@@ -172,6 +203,9 @@ class CTAClassifier:
         """Get embedding vector for text (contrastive/combined modes only)."""
         if self.mode == "classification":
             raise ValueError("Embeddings only available for contrastive/combined modes")
+
+        # Apply structured formatting
+        text = self._format_input(text)
 
         encoding = self.tokenizer(
             text,
@@ -222,7 +256,11 @@ def main():
     args = parser.parse_args()
 
     classifier = CTAClassifier(args.model_dir)
-    print(f"Loaded model from {args.model_dir} (mode: {classifier.mode})")
+    print(f"Loaded model from {args.model_dir}")
+    print(
+        f"  Model: {classifier.model_name}, Mode: {classifier.mode}, "
+        f"Name repeat: {classifier.name_repeat}"
+    )
 
     # Determine input
     if args.text:
