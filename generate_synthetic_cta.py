@@ -25,7 +25,24 @@ NAMING_STYLES = [
     "abbreviations and acronyms",
     "descriptive full names",
     "short abbreviated forms",
+    "single letter or 2-3 character abbreviations (e.g., l, x, y, lt, ln, lng)",
+    "generic/ambiguous names (e.g., col1, field, val, data, coord)",
 ]
+
+# Short/ambiguous name hints for specific labels to force value-based learning
+SHORT_NAME_HINTS = {
+    "latitude": ["l", "lt", "y", "lat", "n", "ns", "v", "coord", "pos", "loc"],
+    "longitude": ["l", "ln", "x", "lon", "lng", "long", "ew", "h", "coord", "pos"],
+    "x_coord": ["x", "xc", "e", "east", "coord", "pos", "val"],
+    "y_coord": ["y", "yc", "n", "north", "coord", "pos", "val"],
+    "zip_code": ["z", "zc", "zip", "pc", "code", "postal", "c"],
+    "city": ["c", "ct", "loc", "place", "name", "area"],
+    "state": ["s", "st", "reg", "area", "loc", "name"],
+    "borough_code": ["b", "bc", "d", "dist", "code", "area", "zone"],
+    "point": ["p", "pt", "geo", "loc", "coord", "geom"],
+    "polygon": ["p", "poly", "geo", "area", "shape", "geom"],
+    "line": ["l", "ln", "path", "route", "geo", "geom"],
+}
 
 # Numeric ranges for programmatic value generation (worldwide)
 VALUE_RANGES = {
@@ -154,13 +171,45 @@ def generate_synthetic_prompt(column_name: str, column_values: str, label: str) 
     constraint_line = f"\nCONSTRAINT: {constraint}" if constraint else ""
     example_values = generate_random_values(label, num_values) or column_values
 
+    # Add short name hints for specific labels
+    short_hints = ""
+    if label in SHORT_NAME_HINTS:
+        hints = SHORT_NAME_HINTS[label]
+        short_hints = (
+            f"\nINCLUDE at least one very short name like: {', '.join(hints[:5])}"
+        )
+
     return f"""Given the table column '{column_name}' which represents a '{label}' type,
 generate three UNIQUE alternative column names using {style} naming convention.
-Example values for reference (GENERATE DIFFERENT values in similar ranges): [{example_values}]{constraint_line}
+Example values (GENERATE DIFFERENT values in similar ranges): [{example_values}]
+{constraint_line}{short_hints}
 Each alternative should have {num_values} NEWLY GENERATED values (do NOT copy the examples).
-Format your output EXACTLY as:
+Format output EXACTLY as:
 alt_name_1, val1, val2, val3; alt_name_2, val1, val2, val3; alt_name_3, val1, val2, val3
 Output ONLY the formatted result, no explanations or quotes."""
+
+
+def generate_short_name_samples(label: str, num_samples: int = 5) -> list:
+    """Generate samples with intentionally short/ambiguous names to force value-based learning."""
+    if label not in SHORT_NAME_HINTS:
+        return []
+
+    samples = []
+    hints = SHORT_NAME_HINTS[label]
+
+    for _ in range(num_samples):
+        name = _rand.choice(hints)
+        # Add optional suffix/prefix variations
+        if _rand.random() < 0.3:
+            name = f"{name}_{_rand.randint(1, 9)}"
+        elif _rand.random() < 0.3:
+            name = f"col_{name}"
+
+        values = generate_random_values(label, _rand.randint(3, 5))
+        if values:
+            samples.append({"name": name, "values": values, "label": label})
+
+    return samples
 
 
 def parse_llm_response(response: str, label: str) -> list:
@@ -271,6 +320,22 @@ def generate_synthetic_data_llm(
         print(
             f"'{label}': {status} - generated {generated_this_run} this run, total={final_total}/{target_per_class}"
         )
+
+    # Add programmatically generated short name samples
+    print("\nAdding short/ambiguous name samples...")
+    short_samples_added = 0
+    for label in label_counts.index:
+        short_samples = generate_short_name_samples(label, num_samples=10)
+        for s in short_samples:
+            key = (s["name"], s["values"], s["label"])
+            if key not in seen:
+                seen.add(key)
+                synthetic_samples.append(s)
+                short_samples_added += 1
+
+    if short_samples_added > 0:
+        pd.DataFrame(synthetic_samples).to_csv(SYNTHETIC_CACHE_FILE, index=False)
+        print(f"Added {short_samples_added} short/ambiguous name samples")
 
     return pd.DataFrame(synthetic_samples)
 

@@ -41,11 +41,74 @@ from transformers import (
 # ============================================================================
 
 
+import random
+
+# Generic column names for masking augmentation
+GENERIC_NAMES = [
+    "col",
+    "column",
+    "field",
+    "val",
+    "value",
+    "data",
+    "c",
+    "f",
+    "v",
+    "col1",
+    "col2",
+    "field1",
+    "field2",
+    "attr",
+    "a",
+    "b",
+    "x",
+    "var",
+]
+
+
+def augment_with_masked_names(
+    df: pd.DataFrame, mask_ratio: float = 0.3
+) -> pd.DataFrame:
+    """
+    Create augmented samples where column names are replaced with generic names.
+    This forces the model to learn from values, not just column names.
+    """
+    augmented_rows = []
+    for _, row in df.iterrows():
+        if random.random() < mask_ratio:
+            masked_row = row.copy()
+            masked_row["name"] = random.choice(GENERIC_NAMES)
+            augmented_rows.append(masked_row)
+    if augmented_rows:
+        return pd.concat([df, pd.DataFrame(augmented_rows)], ignore_index=True)
+    return df
+
+
+def augment_value_only_samples(df: pd.DataFrame, ratio: float = 0.2) -> pd.DataFrame:
+    """
+    Create samples with just values (empty or minimal column names).
+    Teaches model to classify based purely on value patterns.
+    """
+    augmented_rows = []
+    for _, row in df.iterrows():
+        if random.random() < ratio:
+            value_only_row = row.copy()
+            # Use minimal name variations
+            value_only_row["name"] = random.choice(["", "?", "-", "_", "col"])
+            augmented_rows.append(value_only_row)
+    if augmented_rows:
+        return pd.concat([df, pd.DataFrame(augmented_rows)], ignore_index=True)
+    return df
+
+
 def load_training_data(
     curated_path: str = "curated_spatial_cta.csv",
     synthetic_path: str = "synthetic_df.csv",
+    augment: bool = True,
+    mask_ratio: float = 0.3,
+    value_only_ratio: float = 0.15,
 ) -> pd.DataFrame:
-    """Load and combine curated + synthetic training data."""
+    """Load and combine curated + synthetic training data with optional augmentation."""
     dfs = []
 
     if Path(curated_path).exists():
@@ -69,6 +132,16 @@ def load_training_data(
         raise FileNotFoundError("No training data found!")
 
     df = pd.concat(dfs, ignore_index=True)
+    original_len = len(df)
+
+    # Apply augmentation
+    if augment:
+        df = augment_with_masked_names(df, mask_ratio)
+        df = augment_value_only_samples(df, value_only_ratio)
+        print(
+            f"Augmented: {original_len} → {len(df)} samples (+{len(df) - original_len})"
+        )
+
     df["text"] = df.apply(lambda r: f"{r['name']}: {r['values']}", axis=1)
     print(f"Total training samples: {len(df)}")
     return df
@@ -80,21 +153,69 @@ def load_training_data(
 
 
 class CTADataset(Dataset):
-    """Standard dataset for classification."""
+    """Dataset for classification with optional online augmentation."""
 
-    def __init__(self, texts, labels, tokenizer, max_length=128):
-        self.encodings = tokenizer(
-            texts, truncation=True, padding="max_length", max_length=max_length
-        )
+    def __init__(
+        self,
+        texts,
+        labels,
+        tokenizer,
+        max_length=128,
+        augment_prob=0.0,
+    ):
+        self.texts = texts
         self.labels = labels
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.augment_prob = augment_prob
+
+        # Pre-tokenize for efficiency when no augmentation
+        if augment_prob == 0:
+            self.encodings = tokenizer(
+                texts, truncation=True, padding="max_length", max_length=max_length
+            )
+        else:
+            self.encodings = None
 
     def __len__(self):
         return len(self.labels)
 
+    def _augment_text(self, text: str) -> str:
+        """Apply online augmentation to text."""
+        if random.random() >= self.augment_prob:
+            return text
+
+        # Parse "name: values" format
+        if ": " in text:
+            name, values = text.split(": ", 1)
+            # Replace name with generic
+            if random.random() < 0.7:
+                name = random.choice(GENERIC_NAMES)
+            else:
+                # Single char or empty
+                name = random.choice(["", "?", name[0] if name else "x"])
+            return f"{name}: {values}"
+        return text
+
     def __getitem__(self, idx):
+        if self.encodings is not None:
+            return {
+                "input_ids": torch.tensor(self.encodings["input_ids"][idx]),
+                "attention_mask": torch.tensor(self.encodings["attention_mask"][idx]),
+                "labels": torch.tensor(self.labels[idx]),
+            }
+
+        # Online augmentation
+        text = self._augment_text(self.texts[idx])
+        encoding = self.tokenizer(
+            text,
+            truncation=True,
+            padding="max_length",
+            max_length=self.max_length,
+        )
         return {
-            "input_ids": torch.tensor(self.encodings["input_ids"][idx]),
-            "attention_mask": torch.tensor(self.encodings["attention_mask"][idx]),
+            "input_ids": torch.tensor(encoding["input_ids"]),
+            "attention_mask": torch.tensor(encoding["attention_mask"]),
             "labels": torch.tensor(self.labels[idx]),
         }
 
@@ -537,6 +658,21 @@ def main():
         "--test_size", type=float, default=0.2, help="Validation split ratio"
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument(
+        "--no_augment", action="store_true", help="Disable data augmentation"
+    )
+    parser.add_argument(
+        "--mask_ratio",
+        type=float,
+        default=0.3,
+        help="Ratio of samples to augment with masked names",
+    )
+    parser.add_argument(
+        "--online_augment",
+        type=float,
+        default=0.2,
+        help="Online augmentation probability during training (0 to disable)",
+    )
     args = parser.parse_args()
 
     # Set seeds
@@ -554,8 +690,13 @@ def main():
         device = torch.device("cpu")
         print("Using CPU")
 
-    # Load data
-    df = load_training_data(args.curated_path, args.synthetic_path)
+    # Load data with augmentation
+    df = load_training_data(
+        args.curated_path,
+        args.synthetic_path,
+        augment=not args.no_augment,
+        mask_ratio=args.mask_ratio,
+    )
 
     # Encode labels
     label_encoder = LabelEncoder()
@@ -579,7 +720,13 @@ def main():
 
     # Create datasets and loaders based on mode
     if args.mode == "classification":
-        train_ds = CTADataset(train_texts, train_labels, tokenizer, args.max_length)
+        train_ds = CTADataset(
+            train_texts,
+            train_labels,
+            tokenizer,
+            args.max_length,
+            augment_prob=args.online_augment,
+        )
         val_ds = CTADataset(val_texts, val_labels, tokenizer, args.max_length)
 
         model = DistilBertForSequenceClassification.from_pretrained(
@@ -625,7 +772,13 @@ def main():
         )
 
     else:  # combined
-        train_ds = CTADataset(train_texts, train_labels, tokenizer, args.max_length)
+        train_ds = CTADataset(
+            train_texts,
+            train_labels,
+            tokenizer,
+            args.max_length,
+            augment_prob=args.online_augment,
+        )
         val_ds = CTADataset(val_texts, val_labels, tokenizer, args.max_length)
 
         model = CTAContrastiveModel(embed_dim=args.embed_dim, num_labels=num_labels)
