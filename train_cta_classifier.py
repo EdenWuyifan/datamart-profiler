@@ -17,7 +17,6 @@ Usage:
 import argparse
 import json
 import os
-import random
 from pathlib import Path
 
 import numpy as np
@@ -49,165 +48,13 @@ SPECIAL_TOKENS = {
 # Data Loading
 # ============================================================================
 
-# Generic column names for masking augmentation
-GENERIC_NAMES = [
-    "col",
-    "column",
-    "field",
-    "val",
-    "value",
-    "data",
-    "c",
-    "f",
-    "v",
-    "col1",
-    "col2",
-    "field1",
-    "field2",
-    "attr",
-    "a",
-    "b",
-    "x",
-    "var",
-]
-
-# ID-like column patterns that should be non_spatial (prevent confusion with coordinates)
-ID_COLUMN_PATTERNS = [
-    "PHYSICALID",
-    "physicalid",
-    "PhysicalId",
-    "OBJECTID",
-    "objectid",
-    "ObjectId",
-    "OID",
-    "FID",
-    "fid",
-    "Fid",
-    "index_right",
-    "index_left",
-    "INDEX",
-    "segmentid",
-    "SEGMENTID",
-    "SegmentId",
-    "segmentidt",
-    "record_id",
-    "RECORD_ID",
-    "RecordId",
-    "pk_id",
-    "PK_ID",
-    "primary_key",
-    "row_id",
-    "ROW_ID",
-    "RowId",
-    "ref_num",
-    "REF_NUM",
-    "reference_number",
-    "sequence",
-    "SEQUENCE",
-    "seq_num",
-    "feature_id",
-    "FEATURE_ID",
-    "FeatureId",
-]
-
-# Borough/district full names (should be borough_code)
-BOROUGH_NAME_PATTERNS = [
-    ("Borough Name", ["Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"]),
-    ("Borough", ["Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"]),
-    ("borough", ["manhattan", "brooklyn", "queens", "bronx", "staten island"]),
-    ("BOROUGH", ["MANHATTAN", "BROOKLYN", "QUEENS", "BRONX", "STATEN ISLAND"]),
-    ("district_name", ["Westminster", "Camden", "Islington", "Hackney"]),
-    ("ward_name", ["Shibuya", "Shinjuku", "Minato", "Chiyoda"]),
-    ("region", ["North Sydney", "Inner West", "Parramatta"]),
-]
-
-
-def generate_id_samples() -> pd.DataFrame:
-    """Generate non_spatial samples with ID-like patterns."""
-    samples = []
-    for name in ID_COLUMN_PATTERNS:
-        for _ in range(3):  # Multiple variations per pattern
-            # Generate ID-like values (large integers)
-            values = [random.randint(1000, 200000) for _ in range(3)]
-            samples.append(
-                {
-                    "name": name,
-                    "values": ", ".join(str(v) for v in values),
-                    "label": "non_spatial",
-                }
-            )
-            # Also with some variations
-            if random.random() < 0.5:
-                samples.append(
-                    {
-                        "name": f"{name}_{random.randint(1, 5)}",
-                        "values": ", ".join(str(v) for v in values),
-                        "label": "non_spatial",
-                    }
-                )
-    return pd.DataFrame(samples)
-
-
-def generate_borough_name_samples() -> pd.DataFrame:
-    """Generate borough_code samples with full borough names."""
-    samples = []
-    for name, values in BOROUGH_NAME_PATTERNS:
-        for _ in range(3):
-            random.shuffle(values)
-            samples.append(
-                {
-                    "name": name,
-                    "values": ", ".join(values[:3]),
-                    "label": "borough_code",
-                }
-            )
-    return pd.DataFrame(samples)
-
-
-def augment_with_masked_names(
-    df: pd.DataFrame, mask_ratio: float = 0.3
-) -> pd.DataFrame:
-    """
-    Create augmented samples where column names are replaced with generic names.
-    This forces the model to learn from values, not just column names.
-    """
-    augmented_rows = []
-    for _, row in df.iterrows():
-        if random.random() < mask_ratio:
-            masked_row = row.copy()
-            masked_row["name"] = random.choice(GENERIC_NAMES)
-            augmented_rows.append(masked_row)
-    if augmented_rows:
-        return pd.concat([df, pd.DataFrame(augmented_rows)], ignore_index=True)
-    return df
-
-
-def augment_value_only_samples(df: pd.DataFrame, ratio: float = 0.2) -> pd.DataFrame:
-    """
-    Create samples with just values (empty or minimal column names).
-    Teaches model to classify based purely on value patterns.
-    """
-    augmented_rows = []
-    for _, row in df.iterrows():
-        if random.random() < ratio:
-            value_only_row = row.copy()
-            # Use minimal name variations
-            value_only_row["name"] = random.choice(["", "?", "-", "_", "col"])
-            augmented_rows.append(value_only_row)
-    if augmented_rows:
-        return pd.concat([df, pd.DataFrame(augmented_rows)], ignore_index=True)
-    return df
-
 
 def load_training_data(
     curated_path: str = "curated_spatial_cta.csv",
     synthetic_path: str = "synthetic_df.csv",
-    augment: bool = True,
-    mask_ratio: float = 0.3,
-    value_only_ratio: float = 0.15,
     name_repeat: int = 3,
 ) -> pd.DataFrame:
-    """Load and combine curated + synthetic training data with optional augmentation.
+    """Load and combine curated + synthetic training data.
 
     Args:
         name_repeat: Number of times to repeat column name in text (emphasizes name).
@@ -231,29 +78,10 @@ def load_training_data(
         dfs.append(synthetic[["name", "values", "label"]])
         print(f"Loaded {len(synthetic)} samples from {synthetic_path}")
 
-    # Add hardcoded ID samples (prevents confusion with coordinates)
-    id_samples = generate_id_samples()
-    dfs.append(id_samples)
-    print(f"Added {len(id_samples)} ID pattern samples (non_spatial)")
-
-    # Add borough name samples
-    borough_samples = generate_borough_name_samples()
-    dfs.append(borough_samples)
-    print(f"Added {len(borough_samples)} borough name samples")
-
     if not dfs:
         raise FileNotFoundError("No training data found!")
 
     df = pd.concat(dfs, ignore_index=True)
-    original_len = len(df)
-
-    # Apply augmentation
-    if augment:
-        df = augment_with_masked_names(df, mask_ratio)
-        df = augment_value_only_samples(df, value_only_ratio)
-        print(
-            f"Augmented: {original_len} → {len(df)} samples (+{len(df) - original_len})"
-        )
 
     # Create text with structured tokens
     # Format: [COL] Borough [COL] Borough [VAL] Manhattan [VAL] Brooklyn
@@ -276,9 +104,7 @@ def load_training_data(
         return f"{col_parts} {val_parts}".strip()
 
     df["text"] = df.apply(make_text, axis=1)
-    print(
-        f"Total training samples: {len(df)} (name_repeat={name_repeat}, structured tokens)"
-    )
+    print(f"Total training samples: {len(df)} (name_repeat={name_repeat})")
     return df
 
 
@@ -288,69 +114,21 @@ def load_training_data(
 
 
 class CTADataset(Dataset):
-    """Dataset for classification with optional online augmentation."""
+    """Dataset for classification."""
 
-    def __init__(
-        self,
-        texts,
-        labels,
-        tokenizer,
-        max_length=128,
-        augment_prob=0.0,
-    ):
-        self.texts = texts
+    def __init__(self, texts, labels, tokenizer, max_length=128):
+        self.encodings = tokenizer(
+            texts, truncation=True, padding="max_length", max_length=max_length
+        )
         self.labels = labels
-        self.tokenizer = tokenizer
-        self.max_length = max_length
-        self.augment_prob = augment_prob
-
-        # Pre-tokenize for efficiency when no augmentation
-        if augment_prob == 0:
-            self.encodings = tokenizer(
-                texts, truncation=True, padding="max_length", max_length=max_length
-            )
-        else:
-            self.encodings = None
 
     def __len__(self):
         return len(self.labels)
 
-    def _augment_text(self, text: str) -> str:
-        """Apply online augmentation to text."""
-        if random.random() >= self.augment_prob:
-            return text
-
-        # Parse "name: values" format
-        if ": " in text:
-            name, values = text.split(": ", 1)
-            # Replace name with generic
-            if random.random() < 0.7:
-                name = random.choice(GENERIC_NAMES)
-            else:
-                # Single char or empty
-                name = random.choice(["", "?", name[0] if name else "x"])
-            return f"{name}: {values}"
-        return text
-
     def __getitem__(self, idx):
-        if self.encodings is not None:
-            return {
-                "input_ids": torch.tensor(self.encodings["input_ids"][idx]),
-                "attention_mask": torch.tensor(self.encodings["attention_mask"][idx]),
-                "labels": torch.tensor(self.labels[idx]),
-            }
-
-        # Online augmentation
-        text = self._augment_text(self.texts[idx])
-        encoding = self.tokenizer(
-            text,
-            truncation=True,
-            padding="max_length",
-            max_length=self.max_length,
-        )
         return {
-            "input_ids": torch.tensor(encoding["input_ids"]),
-            "attention_mask": torch.tensor(encoding["attention_mask"]),
+            "input_ids": torch.tensor(self.encodings["input_ids"][idx]),
+            "attention_mask": torch.tensor(self.encodings["attention_mask"][idx]),
             "labels": torch.tensor(self.labels[idx]),
         }
 
@@ -835,21 +613,6 @@ def main():
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
-        "--no_augment", action="store_true", help="Disable data augmentation"
-    )
-    parser.add_argument(
-        "--mask_ratio",
-        type=float,
-        default=0.3,
-        help="Ratio of samples to augment with masked names",
-    )
-    parser.add_argument(
-        "--online_augment",
-        type=float,
-        default=0.2,
-        help="Online augmentation probability during training (0 to disable)",
-    )
-    parser.add_argument(
         "--name_repeat",
         type=int,
         default=3,
@@ -872,12 +635,10 @@ def main():
         device = torch.device("cpu")
         print("Using CPU")
 
-    # Load data with augmentation
+    # Load data
     df = load_training_data(
         args.curated_path,
         args.synthetic_path,
-        augment=not args.no_augment,
-        mask_ratio=args.mask_ratio,
         name_repeat=args.name_repeat,
     )
 
@@ -908,13 +669,7 @@ def main():
 
     # Create datasets and loaders based on mode
     if args.mode == "classification":
-        train_ds = CTADataset(
-            train_texts,
-            train_labels,
-            tokenizer,
-            args.max_length,
-            augment_prob=args.online_augment,
-        )
+        train_ds = CTADataset(train_texts, train_labels, tokenizer, args.max_length)
         val_ds = CTADataset(val_texts, val_labels, tokenizer, args.max_length)
 
         model = CTAClassificationModel(num_labels=num_labels)
@@ -964,13 +719,7 @@ def main():
         )
 
     else:  # combined
-        train_ds = CTADataset(
-            train_texts,
-            train_labels,
-            tokenizer,
-            args.max_length,
-            augment_prob=args.online_augment,
-        )
+        train_ds = CTADataset(train_texts, train_labels, tokenizer, args.max_length)
         val_ds = CTADataset(val_texts, val_labels, tokenizer, args.max_length)
 
         model = CTAContrastiveModel(embed_dim=args.embed_dim, num_labels=num_labels)
