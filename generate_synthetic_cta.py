@@ -2,8 +2,6 @@
 """Generate synthetic CTA (Column Type Annotation) training data using LLM."""
 
 import os
-import random as _rand
-import time
 import argparse
 
 import pandas as pd
@@ -18,107 +16,7 @@ load_dotenv()
 
 SYNTHETIC_CACHE_FILE = "synthetic_df_checkpoint.csv"
 CURATED_CTA_FILE = "curated_spatial_cta.csv"
-
-NAMING_STYLES = [
-    "snake_case with underscores",
-    "camelCase",
-    "abbreviations and acronyms",
-    "descriptive full names",
-    "short abbreviated forms",
-    "single letter or 2-3 character abbreviations (e.g., l, x, y, lt, ln, lng)",
-    "generic/ambiguous names (e.g., col1, field, val, data, coord)",
-]
-
-# Short/ambiguous name hints for specific labels to force value-based learning
-SHORT_NAME_HINTS = {
-    "latitude": ["l", "lt", "y", "lat", "n", "ns", "v", "coord", "pos", "loc"],
-    "longitude": ["l", "ln", "x", "lon", "lng", "long", "ew", "h", "coord", "pos"],
-    "x_coord": ["x", "xc", "e", "east", "coord", "pos", "val"],
-    "y_coord": ["y", "yc", "n", "north", "coord", "pos", "val"],
-    "zip_code": ["z", "zc", "zip", "pc", "code", "postal", "c"],
-    "city": ["c", "ct", "loc", "place", "name", "area"],
-    "state": ["s", "st", "reg", "area", "loc", "name"],
-    "borough_code": ["b", "bc", "d", "dist", "code", "area", "zone"],
-    "point": ["p", "pt", "geo", "loc", "coord", "geom"],
-    "polygon": ["p", "poly", "geo", "area", "shape", "geom"],
-    "line": ["l", "ln", "path", "route", "geo", "geom"],
-}
-
-# Numeric ranges for programmatic value generation (worldwide)
-VALUE_RANGES = {
-    "latitude": (-60.0, 70.0),
-    "longitude": (-180.0, 180.0),
-    "x_coord": (100000, 900000),
-    "y_coord": (100000, 900000),
-}
-
-# Label-specific constraints for valid value generation (worldwide diversity)
-LABEL_CONSTRAINTS = {
-    "borough_code": (
-        "Values MUST be district/borough/ward codes from cities WORLDWIDE "
-        "(e.g., London boroughs, Paris arrondissements, Tokyo wards, Sydney councils). "
-        "MIX different cities and formats."
-    ),
-    "bbl": (
-        "Values MUST be property/parcel identifiers from various countries. "
-        "Use formats like US APN, UK UPRN, Canadian PID, Australian lot numbers. "
-        "VARY formats significantly."
-    ),
-    "bin": (
-        "Values MUST be building identification numbers from various cities worldwide. "
-        "VARY formats (numeric, alphanumeric) across different countries."
-    ),
-    "zip_code": (
-        "Values MUST be postal codes from WORLDWIDE locations. Include US ZIP, "
-        "UK postcodes (SW1A 1AA), Canadian (K1A 0B1), German (10115), "
-        "Japanese (100-0001), Australian (2000). MIX countries."
-    ),
-    "latitude": (
-        "Values MUST be valid latitudes from WORLDWIDE locations. Include places from "
-        "ALL continents: Europe, Asia, Americas, Africa, Oceania. "
-        "Range from -60 to 70. Use 2-6 decimal places."
-    ),
-    "longitude": (
-        "Values MUST be valid longitudes from WORLDWIDE locations. Include places from "
-        "ALL continents. Full range -180 to 180. Use 2-6 decimal places."
-    ),
-    "x_coord": (
-        "Values MUST be projected X coordinates. These can be from various projection "
-        "systems (UTM, State Plane, national grids). VARY the ranges based on different regions."
-    ),
-    "y_coord": (
-        "Values MUST be projected Y coordinates. These can be from various projection "
-        "systems (UTM, State Plane, national grids). VARY the ranges based on different regions."
-    ),
-    "point": (
-        "Values MUST be valid WKT POINT format. VARY coordinates across ALL continents "
-        "worldwide, not limited to any single region."
-    ),
-    "polygon": (
-        "Values MUST be valid WKT POLYGON format with 4+ vertices. "
-        "VARY sizes and locations across different countries and continents."
-    ),
-    "multi-polygon": (
-        "Values MUST be valid WKT MULTIPOLYGON format. Include polygons from DIFFERENT countries."
-    ),
-    "line": (
-        "Values MUST be valid WKT LINESTRING format. VARY lengths and locations "
-        "across different continents."
-    ),
-    "multi-line": (
-        "Values MUST be valid WKT MULTILINESTRING format. VARY across different "
-        "countries and regions."
-    ),
-    "state": (
-        "Values MUST be states/provinces/regions from WORLDWIDE: US states, "
-        "Canadian provinces, UK counties, German Länder, Japanese prefectures, "
-        "Australian states, etc."
-    ),
-    "city": (
-        "Values MUST be city names from WORLDWIDE: major cities from all continents "
-        "(Tokyo, London, Paris, São Paulo, Sydney, Cairo, Mumbai, etc.)."
-    ),
-}
+OUTPUT_FILE = "synthetic_df.csv"
 
 
 def get_llm():
@@ -138,85 +36,229 @@ def get_llm():
     )
 
 
-def parse_training_df(curated_cta: pd.DataFrame) -> pd.DataFrame:
-    """Parse curated CTA CSV into training dataframe."""
-    training_df = {"name": [], "values": [], "label": []}
-    for _, row in curated_cta.iterrows():
-        training_df["name"].append(row["Column"])
-        training_df["values"].append(row["Values"])
-        training_df["label"].append(row["Label"])
-    return pd.DataFrame(training_df)
-
-
-def generate_random_values(label: str, num_values: int = 4) -> str:
-    """Generate random values within valid ranges for numeric types."""
-    if label not in VALUE_RANGES:
-        return None
-    min_val, max_val = VALUE_RANGES[label]
-    values = []
-    for _ in range(num_values):
-        if label in ("x_coord", "y_coord"):
-            val = _rand.randint(int(min_val), int(max_val))
-        else:
-            val = round(_rand.uniform(min_val, max_val), _rand.randint(2, 6))
-        values.append(str(val))
-    return ", ".join(values)
-
-
 def generate_synthetic_prompt(column_name: str, column_values: str, label: str) -> str:
     """Generate prompt for LLM to create synthetic training samples."""
-    style = _rand.choice(NAMING_STYLES)
-    num_values = _rand.randint(3, 5)
-    constraint = LABEL_CONSTRAINTS.get(label, "")
-    constraint_line = f"\nCONSTRAINT: {constraint}" if constraint else ""
-    example_values = generate_random_values(label, num_values) or column_values
+    num_values = 3
 
-    # Add short name hints for specific labels
-    short_hints = ""
-    if label in SHORT_NAME_HINTS:
-        hints = SHORT_NAME_HINTS[label]
-        short_hints = (
-            f"\nINCLUDE at least one very short name like: {', '.join(hints[:5])}"
-        )
+    return f"""You are a synthetic tabular data generator used from a Python program.
 
-    return f"""Given the table column '{column_name}' which represents a '{label}' type,
-generate three UNIQUE alternative column names using {style} naming convention.
-Example values (GENERATE DIFFERENT values in similar ranges): [{example_values}]
-{constraint_line}{short_hints}
-Each alternative should have {num_values} NEWLY GENERATED values (do NOT copy the examples).
-Format output EXACTLY as:
-alt_name_1, val1, val2, val3; alt_name_2, val1, val2, val3; alt_name_3, val1, val2, val3
-Output ONLY the formatted result, no explanations or quotes."""
+Your job is: given a table column name, its semantic label (one of a fixed set), a naming style, and a few example values, you must:
+
+1. Propose THREE UNIQUE alternative column names that follow the requested naming convention.
+2. For EACH alternative column name, generate a list of NEW sample values that:
+   - Match the semantic label,
+   - Are realistic for UNITED STATES data only,
+   - DO NOT copy or trivially paraphrase the provided example values,
+   - Obey the strict constraints below for that label.
 
 
-def generate_short_name_samples(label: str, num_samples: int = 5) -> list:
-    """Generate samples with intentionally short/ambiguous names to force value-based learning."""
-    if label not in SHORT_NAME_HINTS:
-        return []
+  Given the table column: 
+  - Column name: '{column_name}'
+  - Column values (sample): {column_values}
+  - Label: '{label}'
 
-    samples = []
-    hints = SHORT_NAME_HINTS[label]
+  Each alternative should have {num_values} NEWLY GENERATED values (do NOT copy the examples).
+  
+  Format output EXACTLY as:
+  alt_name_1, val1, val2, val3; alt_name_2, val1, val2, val3; alt_name_3, val1, val2, val3
+  Output ONLY the formatted result, no explanations or quotes.
 
-    for _ in range(num_samples):
-        name = _rand.choice(hints)
-        # Add optional suffix/prefix variations
-        if _rand.random() < 0.3:
-            name = f"{name}_{_rand.randint(1, 9)}"
-        elif _rand.random() < 0.3:
-            name = f"col_{name}"
+You MUST:
+- Make all THREE alternative names distinct in wording.
+- Generate exactly {num_values} values per alternative name.
+- NEVER reuse the exact example values; generate new ones in similar ranges or domains.
+- Do NOT add quotes, brackets, extra text, or newlines.
 
-        values = generate_random_values(label, _rand.randint(3, 5))
-        if values:
-            samples.append({"name": name, "values": values, "label": label})
+All data must be US-focused. Use the following label-specific rules:
 
-    return samples
+──────────────── LABEL-SPECIFIC GENERATION RULES (US-ONLY) ────────────────
+
+1) label = "latitude"  (spatial)
+- Decimal latitude in degrees (single numeric per value).
+- Range (contiguous US): 24.5 ≤ lat ≤ 49.5 (you MAY occasionally use AK/HI: 18.0–71.5).
+- Always POSITIVE; MAY include a leading "+"; NEVER include a minus sign.
+- No commas or brackets; just a float-like string (e.g. 40.7128, 34.05, +47.60621).
+- Use 3–7 decimal places; optional surrounding spaces are allowed but not required.
+
+2) label = "longitude"  (spatial)
+- Decimal longitude in degrees (single numeric per value).
+- Range (US): -125.0 ≤ lon ≤ -66.0.
+- Always NEGATIVE; no positive longitudes.
+- No commas or brackets; just a float-like string (e.g. -74.0060, -118.2437).
+- Use 3–7 decimal places.
+
+3) label = "x_coord"  (spatial)
+- Projected X coordinate, large magnitude (e.g., Web Mercator / State Plane).
+- Numeric values with magnitude ~1,000,000–15,000,000 in ABSOLUTE value.
+- Use integers or floats with few decimals: -9735653, -8234567.12.
+- No commas; single number per value.
+- Should typically be NEGATIVE for US if you mimic Web Mercator (but not strictly required; keep large magnitude).
+
+4) label = "y_coord"  (spatial)
+- Projected Y coordinate, large magnitude.
+- Numeric values ~2,000,000–7,000,000 for US.
+- Integers or floats, e.g. 3123456, 4567890.75.
+- No commas; single number per value.
+
+5) label = "point"  (spatial)
+- Represent a geographic point ONLY as WKT POINT, in (lon lat) order.
+- Format: POINT(<lon> <lat>)
+  - Example shape: POINT(-74.0060 40.7128)
+- <lon> in [-125, -66], <lat> in [24.5, 49.5] (or extended US ranges).
+- No commas inside the parentheses; exactly two numbers.
+- Always start with "POINT(" and end with ")".
+
+6) label = "line"  (spatial)
+- Represent as WKT LINESTRING.
+- Format: LINESTRING(x1 y1,x2 y2,...)
+  - x = lon, y = lat, all in US ranges.
+- Use 2–10 coordinate pairs.
+- No extra parentheses; do NOT use MULTILINESTRING here.
+
+7) label = "multi-line"  (spatial)
+- Represent as WKT MULTILINESTRING.
+- Format: MULTILINESTRING((x1 y1,x2 y2,...),(x'1 y'1,x'2 y'2,...))
+- Use 2–5 lines; each line has 2–10 points.
+- Always start with "MULTILINESTRING(" and use nested parentheses.
+
+8) label = "polygon"  (spatial)
+- Represent as WKT POLYGON with a single outer ring.
+- Format: POLYGON((x1 y1,x2 y2,...,xN yN))
+- First and last coordinate pair must be IDENTICAL to close the ring.
+- Use 4–15 vertices.
+- lon/lat ranges follow US bounds.
+
+9) label = "multi-polygon"  (spatial)
+- Represent as WKT MULTIPOLYGON.
+- Format: MULTIPOLYGON(((x1 y1,...,xN yN)),((x'1 y'1,...,x'M y'M)))
+- 2–3 polygons; each polygon ring is closed (first = last).
+- Use 4–15 vertices per polygon.
+
+10) label = "borough"  (spatial)
+- Represents US borough-level or similar sub-city administrative units.
+- Values may include:
+  - Named boroughs in large US cities (e.g., "Brooklyn", "Queens", "Staten Island"),
+  - Alaska boroughs (e.g., "Anchorage Borough", "Matanuska-Susitna Borough"),
+  - Other “borough”-style or district names used in US municipalities (e.g., "North Borough", "Downtown Borough").
+- Mostly Title Case; you may occasionally use ALL CAPS.
+- Do NOT generate raw numeric codes here (those belong to "borough_code").
+
+11) label = "borough_code"  (spatial)
+- Represents codes for boroughs or similar sub-city units in the US.
+- Values can be:
+  - Small integers (e.g., 1, 2, 3, 10, 12),
+  - Or short alphanumeric codes (e.g., B1, Q2, AB-03) if plausible as district/borough codes.
+- Use plain tokens with digits and optional letters; avoid full names.
+- NEVER include full borough names or words like "Borough" in this label.
+
+12) label = "city"  (spatial)
+- US city/town names ONLY; no state, no zip code.
+- Examples of shape (NOT to be copied directly):
+  - New York, Los Angeles, Chicago, Houston, Miami, Suffield, Ellington, Union, Boulder, Madison, Raleigh, Phoenix, Omaha.
+- Mostly Title Case; some ALL CAPS or lowercase variations are ok.
+- No ", ST" or zip here; just the city/town name string.
+- NOT restricted to New York City; use cities from across the US.
+
+13) label = "state"  (spatial)
+- Full US state names ONLY (50 states; DC optional).
+- Examples of shape:
+  - New York, California, Texas, Florida, Connecticut, Massachusetts, Washington, Colorado, Georgia, Ohio, Arizona.
+- Mostly Title Case; occasional ALL CAPS is ok.
+- Do NOT generate city names here.
+- NOT restricted to any single region; may be any US state.
+
+14) label = "state_code"  (spatial)
+- 2-letter USPS state codes ONLY, uppercase.
+- Examples (shape only): NY, CA, TX, FL, IL, MA, CT, WA, CO, GA, NC, AZ, OH.
+- Exactly 2 characters; no dots or extra symbols.
+- Any valid US state code (nationwide), not just codes around NYC.
+
+15) label = "country"  (spatial)
+- Country names for the United States ONLY.
+- Allowed forms:
+  - United States
+  - United States of America
+  - USA
+  - U.S.A.
+- Do NOT output any other countries.
+
+16) label = "zip5"  (spatial)
+- 5-digit US ZIP codes as strings.
+- Pattern: exactly 5 digits, leading zeros allowed: "02115", "10001", "60616", "94110".
+- NEVER add a dash or extra digits.
+- Use ZIP patterns from any US state (not NYC-specific).
+
+17) label = "zip9"  (spatial)
+- ZIP+4 codes.
+- Pattern: 5 digits, dash, 4 digits (exactly 10 characters).
+  - e.g. "02115-1234", "10001-0001".
+- Do NOT omit the dash or shorten the groups.
+- Use plausible US ZIP+4 combinations from any US region.
+
+18) label = "address"  (spatial)
+- US street/residence addresses. Each value MUST look like a real postal-style address fragment.
+- All values MUST start with:
+  - A street number (integer, or integer+letter), or
+  - A PO Box indicator (e.g., "PO Box 123").
+- Include a street name and optional suffix; may also include city/state/zip.
+- Examples of shape (NOT to be copied directly):
+  - 1600 Pennsylvania Ave NW
+  - 25 Broadway Apt 12B
+  - 742 Evergreen Terrace
+  - 123 Main St, Suffield, CT 06078
+  - PO Box 123, Boston, MA 02115
+- Addresses may be anywhere in the US (not just NYC).
+- Do NOT generate pure "City, ST" without a number for this label.
+
+19) label = "bbl"  (spatial, NYC Borough–Block–Lot)
+- NYC-specific identifier; this ONE label remains NYC-focused.
+- Format: "<borough>-<block>-<lot>"
+  - borough: integer 1–5.
+  - block: 1–5 digits, optionally zero-padded.
+  - lot: 1–4 digits, optionally zero-padded.
+- Examples of shape:
+  - 3-14151-2922
+  - 1-00023-0005
+  - 5-1234-12
+- Exactly two dashes and three numeric segments.
+
+20) label = "bin"  (spatial, NYC Building ID)
+- NYC-specific identifier; this ONE label remains NYC-focused.
+- 7-digit numeric string ONLY.
+- Pattern: exactly 7 digits, e.g. 1087654, 5852956, 3001234.
+- No dashes, no letters.
+
+21) label = "non_spatial"  (NON-spatial)
+- Values MUST NOT encode recognizable spatial/location information.
+- Good options:
+  - Person names: Alice, Bob, Charlie Brown, John Doe, etc.
+  - Generic IDs: A12345, USER_00123, ID-98765 (avoid pure 5-digit or 7-digit numerics).
+  - Categorical labels: High, Medium, Low; Yes, No; Pending, Approved, Rejected.
+  - Numeric measures: 0, 1, 12, 250, 3.14, 0.75 (avoid values that look exactly like lat/lon or x/y ranges).
+  - Dates/times: 2024-01-15, 2023-12-31 10:30:00.
+  - Generic notes: Patient reported mild symptoms; Order shipped on Monday.
+- Avoid:
+  - Anything that matches ZIP, BIN, BBL, POINT/LINESTRING/POLYGON/etc., city/state/country names, or address formats.
+
+──────────────── OUTPUT FORMAT (VERY IMPORTANT) ────────────────
+
+After applying all the rules above, respond with EXACTLY:
+
+alt_name_1, val1, val2, ..., valN; alt_name_2, val1, val2, ..., valN; alt_name_3, val1, val2, ..., valN
+
+- Replace N with {num_values}.
+- Use commas and semicolons exactly as shown.
+- Do NOT wrap values or names in quotes.
+- Do NOT prepend or append any explanation, label, or extra text.
+"""
 
 
-def parse_llm_response(response: str, label: str) -> list:
+def parse_response(response: str, label: str) -> list:
     """Parse LLM response into training samples."""
     samples = []
     try:
-        for part in response.strip().split(";"):
+        content = response.content if hasattr(response, "content") else str(response)
+        for part in content.strip().split(";"):
             part = part.strip()
             if not part:
                 continue
@@ -234,120 +276,8 @@ def parse_llm_response(response: str, label: str) -> list:
     return samples
 
 
-def generate_synthetic_data_llm(
-    training_df: pd.DataFrame,
-    label_counts: pd.Series,
-    target_per_class: int = 50,
-    max_retries: int = 3,
-    max_stale_rounds: int = 10,
-) -> pd.DataFrame:
-    """Generate synthetic training data using LLM for undersampled labels."""
-    llm = get_llm()
-
-    # Load existing checkpoint
-    if os.path.exists(SYNTHETIC_CACHE_FILE):
-        existing_df = pd.read_csv(SYNTHETIC_CACHE_FILE)
-        synthetic_samples = existing_df.to_dict("records")
-        existing_counts = existing_df["label"].value_counts().to_dict()
-        print(f"Loaded {len(synthetic_samples)} existing samples from checkpoint")
-    else:
-        synthetic_samples = []
-        existing_counts = {}
-
-    seen = {(s["name"], s["values"], s["label"]) for s in synthetic_samples}
-    label_generated = {
-        label: existing_counts.get(label, 0) for label in label_counts.index
-    }
-
-    for label, orig_count in tqdm(
-        label_counts.items(), desc="Generating synthetic data"
-    ):
-        current_synthetic = label_generated.get(label, 0)
-        total_current = orig_count + current_synthetic
-        needed = max(0, target_per_class - total_current)
-
-        if needed == 0:
-            print(f"'{label}': already at target ({total_current}/{target_per_class})")
-            continue
-
-        label_examples = training_df[training_df["label"] == label].to_dict("records")
-        generated_this_run = 0
-        stale_rounds = 0
-        round_idx = 0
-
-        while generated_this_run < needed and stale_rounds < max_stale_rounds:
-            row = label_examples[round_idx % len(label_examples)]
-            prompt = generate_synthetic_prompt(row["name"], row["values"], label)
-            round_idx += 1
-
-            for attempt in range(max_retries):
-                try:
-                    response = llm.invoke(prompt)
-                    new_samples = parse_llm_response(response.content, label)
-
-                    unique_samples = []
-                    for s in new_samples:
-                        key = (s["name"], s["values"], s["label"])
-                        if key not in seen:
-                            seen.add(key)
-                            unique_samples.append(s)
-
-                    if unique_samples:
-                        synthetic_samples.extend(unique_samples)
-                        generated_this_run += len(unique_samples)
-                        label_generated[label] = label_generated.get(label, 0) + len(
-                            unique_samples
-                        )
-                        stale_rounds = 0
-                        pd.DataFrame(synthetic_samples).to_csv(
-                            SYNTHETIC_CACHE_FILE, index=False
-                        )
-                    else:
-                        stale_rounds += 1
-                    break
-                except Exception as e:
-                    print(f"Attempt {attempt + 1} failed for {label}: {e}")
-                    time.sleep(2)
-            else:
-                stale_rounds += 1
-
-        final_total = orig_count + label_generated.get(label, 0)
-        status = (
-            "✓"
-            if final_total >= target_per_class
-            else f"⚠ SHORT by {target_per_class - final_total}"
-        )
-        print(
-            f"'{label}': {status} - generated {generated_this_run} this run, total={final_total}/{target_per_class}"
-        )
-
-    # Add programmatically generated short name samples
-    print("\nAdding short/ambiguous name samples...")
-    short_samples_added = 0
-    for label in label_counts.index:
-        short_samples = generate_short_name_samples(label, num_samples=10)
-        for s in short_samples:
-            key = (s["name"], s["values"], s["label"])
-            if key not in seen:
-                seen.add(key)
-                synthetic_samples.append(s)
-                short_samples_added += 1
-
-    if short_samples_added > 0:
-        pd.DataFrame(synthetic_samples).to_csv(SYNTHETIC_CACHE_FILE, index=False)
-        print(f"Added {short_samples_added} short/ambiguous name samples")
-
-    return pd.DataFrame(synthetic_samples)
-
-
 def main():
     parser = argparse.ArgumentParser(description="Generate synthetic CTA training data")
-    parser.add_argument(
-        "--target", type=int, default=120, help="Target samples per class"
-    )
-    parser.add_argument(
-        "--max-stale", type=int, default=10, help="Max stale rounds before giving up"
-    )
     parser.add_argument(
         "--curated-csv",
         type=str,
@@ -355,35 +285,106 @@ def main():
         help="Path to curated CTA CSV",
     )
     parser.add_argument(
-        "--output", type=str, default="synthetic_df.csv", help="Output file path"
+        "--output", type=str, default=OUTPUT_FILE, help="Output file path"
+    )
+    parser.add_argument(
+        "--target",
+        type=int,
+        default=120,
+        help="Target number of synthetic samples per class",
     )
     args = parser.parse_args()
 
     # Load curated data
     print(f"Loading curated CTA from {args.curated_csv}")
-    curated_cta = pd.read_csv(args.curated_csv)
-    training_df = parse_training_df(curated_cta)
+    curated_df = pd.read_csv(args.curated_csv)
 
-    # Analyze label distribution
-    label_counts = training_df["label"].value_counts()
-    print(f"\nLabel distribution:\n{label_counts}")
-    print(f"\nTotal samples: {len(training_df)}, Unique labels: {len(label_counts)}")
+    # Initialize LLM
+    llm = get_llm()
 
-    # Generate synthetic data
-    synthetic_df = generate_synthetic_data_llm(
-        training_df,
-        label_counts,
-        target_per_class=args.target,
-        max_stale_rounds=args.max_stale,
-    )
+    # Load existing cache if it exists
+    if os.path.exists(SYNTHETIC_CACHE_FILE):
+        cache_df = pd.read_csv(SYNTHETIC_CACHE_FILE)
+        all_samples = cache_df.to_dict("records")
+        existing_count = len(all_samples)
+        print(f"Loaded {existing_count} existing samples from {SYNTHETIC_CACHE_FILE}")
+    else:
+        all_samples = []
+        existing_count = 0
+
+    # Count existing samples per label
+    existing_counts = {}
+    if all_samples:
+        result_df = pd.DataFrame(all_samples)
+        existing_counts = result_df["label"].value_counts().to_dict()
+        print(f"\nExisting samples per label: {existing_counts}")
+
+    # Get unique labels from curated data
+    unique_labels = curated_df["Label"].unique()
+    print(f"\nTarget: {args.target} samples per class")
+    print(f"Unique labels: {len(unique_labels)}")
+
+    # Generate synthetic data for each label until target is reached
+    for label in unique_labels:
+        current_count = existing_counts.get(label, 0)
+        needed = max(0, args.target - current_count)
+
+        if needed == 0:
+            print(f"\n'{label}': Already at target ({current_count}/{args.target})")
+            continue
+
+        print(
+            f"\n'{label}': Need {needed} more samples (current: {current_count}/{args.target})"
+        )
+
+        # Get all curated examples for this label
+        label_examples = curated_df[curated_df["Label"] == label].to_dict("records")
+        generated_this_label = 0
+        example_idx = 0
+
+        while generated_this_label < needed:
+            row = label_examples[example_idx % len(label_examples)]
+            example_idx += 1
+
+            prompt = generate_synthetic_prompt(
+                row["Column"], row["Values"], row["Label"]
+            )
+            try:
+                response = llm.invoke(prompt)
+                samples = parse_response(response, row["Label"])
+
+                if samples:
+                    all_samples.extend(samples)
+                    generated_this_label += len(samples)
+                    # Cache after each successful generation
+                    pd.DataFrame(all_samples).to_csv(SYNTHETIC_CACHE_FILE, index=False)
+                    print(
+                        f"  Generated {len(samples)} samples (total for '{label}': {current_count + generated_this_label}/{args.target})"
+                    )
+            except Exception as e:
+                print(f"  Error processing {row['Column']}: {e}")
+                continue
+
+        final_count = current_count + generated_this_label
+        status = (
+            "✓"
+            if final_count >= args.target
+            else f"⚠ SHORT by {args.target - final_count}"
+        )
+        print(
+            f"'{label}': {status} - generated {generated_this_label} this run, total={final_count}/{args.target}"
+        )
 
     # Save final output
-    synthetic_df.to_csv(args.output, index=False)
-    print(f"\nSaved {len(synthetic_df)} synthetic samples to {args.output}")
+    result_df = pd.DataFrame(all_samples)
+    result_df.to_csv(args.output, index=False)
+    print(f"\nSaved {len(result_df)} total samples to {args.output}")
+    print(f"Added {len(result_df) - existing_count} new samples")
 
     # Print final distribution
-    final_counts = synthetic_df["label"].value_counts()
-    print(f"\nFinal synthetic distribution:\n{final_counts}")
+    if len(result_df) > 0:
+        final_counts = result_df["label"].value_counts()
+        print(f"\nFinal distribution:\n{final_counts}")
 
 
 if __name__ == "__main__":

@@ -50,38 +50,23 @@ SPECIAL_TOKENS = {
 
 
 def load_training_data(
-    curated_path: str = "curated_spatial_cta.csv",
     synthetic_path: str = "synthetic_df.csv",
     name_repeat: int = 3,
 ) -> pd.DataFrame:
-    """Load and combine curated + synthetic training data.
+    """Load synthetic training data only.
 
     Args:
+        synthetic_path: Path to synthetic training data CSV
         name_repeat: Number of times to repeat column name in text (emphasizes name).
     """
-    dfs = []
-
-    if Path(curated_path).exists():
-        curated = pd.read_csv(curated_path)
-        curated_df = pd.DataFrame(
-            {
-                "name": curated["Column"],
-                "values": curated["Values"],
-                "label": curated["Label"],
-            }
+    if not Path(synthetic_path).exists():
+        raise FileNotFoundError(
+            f"Synthetic training data not found at {synthetic_path}!"
         )
-        dfs.append(curated_df)
-        print(f"Loaded {len(curated_df)} samples from {curated_path}")
 
-    if Path(synthetic_path).exists():
-        synthetic = pd.read_csv(synthetic_path)
-        dfs.append(synthetic[["name", "values", "label"]])
-        print(f"Loaded {len(synthetic)} samples from {synthetic_path}")
-
-    if not dfs:
-        raise FileNotFoundError("No training data found!")
-
-    df = pd.concat(dfs, ignore_index=True)
+    synthetic = pd.read_csv(synthetic_path)
+    df = synthetic[["name", "values", "label"]].copy()
+    print(f"Loaded {len(df)} synthetic samples from {synthetic_path}")
 
     # Create text with structured tokens
     # Format: [COL] Borough [COL] Borough [VAL] Manhattan [VAL] Brooklyn
@@ -606,7 +591,6 @@ def main():
     parser.add_argument(
         "--output_dir", type=str, default="./model", help="Output directory"
     )
-    parser.add_argument("--curated_path", type=str, default="curated_spatial_cta.csv")
     parser.add_argument("--synthetic_path", type=str, default="synthetic_df.csv")
     parser.add_argument(
         "--test_size", type=float, default=0.2, help="Validation split ratio"
@@ -635,10 +619,9 @@ def main():
         device = torch.device("cpu")
         print("Using CPU")
 
-    # Load data
+    # Load data (synthetic only)
     df = load_training_data(
-        args.curated_path,
-        args.synthetic_path,
+        synthetic_path=args.synthetic_path,
         name_repeat=args.name_repeat,
     )
 

@@ -78,7 +78,7 @@ class CTAClassifier:
         self.mode = config.get("mode", "classification")
         self.model_name = config.get("model_name", "BAAI/bge-small-en-v1.5")
         self.embed_dim = config.get("embed_dim", 128)
-        self.name_repeat = config.get("name_repeat", 1)  # Name emphasis
+        self.name_repeat = config.get("name_repeat", 3)  # Name emphasis
         self.special_tokens = config.get("special_tokens", {})  # [COL], [VAL] tokens
 
         # Device
