@@ -195,8 +195,23 @@ def load_data(data, load_max_size=None, indexes=True):
     logger.info("DataFrame: %d rows, %d columns", data.shape[0], data.shape[1])
 
     # Compute stats on data before sampling (cheap operations)
+    # Also extract 3 non-null sample values for geo classifier
     for col in data.columns:
+        # Count distinct values
         full_data_stats[col] = {"num_distinct_values": data[col].nunique()}
+
+        # Extract 3 unique non-null sample values from full dataset
+        sample_values = []
+        seen = set()
+        col_series = data[col]
+        for v in col_series:
+            v_str = str(v).strip()
+            if v_str and v_str not in ("", "nan", "None") and v_str not in seen:
+                seen.add(v_str)
+                sample_values.append(v_str)
+                if len(sample_values) >= 3:
+                    break
+        full_data_stats[col]["sample_values"] = sample_values
 
     # Sample if DataFrame exceeds target size
     avg_row_size = data.memory_usage(deep=True).sum() / max(len(data), 1)
@@ -260,18 +275,11 @@ def process_column(
         confidence = geo_info.get("confidence", 0.0)
         source = geo_info.get("source", "ml")
 
-        # Get sample values for logging
+        # Get sample values for logging (use stored samples if available)
         column_name = column_meta.get("name", "unknown")
-        sample_values = []
-        seen = set()
-        for v in array[:10]:
-            v_str = str(v).strip()
-            if v_str and v_str not in seen:
-                seen.add(v_str)
-                sample_values.append(v_str)
-                if len(sample_values) >= 3:
-                    break
-        samples_str = ", ".join(sample_values[:3])
+        if geo_prediction and "sample_values" in geo_prediction:
+            sample_values = geo_prediction["sample_values"]
+            samples_str = ", ".join([str(v) for v in sample_values])
 
         logger.info(
             "Column type %s [%s] (from geo_classifier: column=%r, label=%s, confidence=%.4f, source=%s, samples=[%s])",
@@ -591,25 +599,18 @@ def process_dataset(
 
     if geo_classifier:
         # Collect samples from all columns (no manual override)
+        # Use pre-extracted sample values from full dataset (before sampling)
         columns_for_batch = []
         for column_idx, column_meta in enumerate(columns):
             name = column_meta["name"]
             if name in manual_columns:
                 continue  # Skip columns with manual annotations
 
-            # Sample 3 unique non-empty values from first 50 rows
-            array = data.iloc[:, column_idx]
-            seen = set()
-            sample_values = []
-            for v in array[:50]:
-                if v and v not in seen:
-                    seen.add(v)
-                    sample_values.append(v)
-                    if len(sample_values) >= 3:
-                        break
-
-            if sample_values:
-                columns_for_batch.append((column_idx, name, sample_values))
+            # Use pre-extracted sample values from full dataset
+            if name in full_data_stats and "sample_values" in full_data_stats[name]:
+                sample_values = full_data_stats[name]["sample_values"]
+                if sample_values:
+                    columns_for_batch.append((column_idx, name, sample_values))
 
         # BATCH PREDICTION - single forward pass for ALL columns!
         if columns_for_batch:
@@ -618,12 +619,48 @@ def process_dataset(
                 batch_inputs, threshold=geo_classifier_threshold
             )
 
-            for (column_idx, name, _), prediction in zip(
+            for (column_idx, name, sample_values), prediction in zip(
                 columns_for_batch, batch_results
             ):
+                # Store prediction with sample values used
                 geo_predictions[column_idx] = prediction
+                geo_predictions[column_idx]["sample_values"] = sample_values
 
     step_times["2_geo_batch_predict"] = time.perf_counter() - step_start
+
+    # Incrementally save geo attributes to CSV
+    if geo_predictions:
+        geo_results = []
+        for col_idx, prediction in geo_predictions.items():
+            column_meta = columns[col_idx]
+            prediction = geo_predictions[col_idx]
+            label = prediction.get("label", "non_spatial")
+            if label == "non_spatial":
+                continue
+            col_name = column_meta["name"]
+            geo_results.append(
+                {
+                    "name": col_name,
+                    "values": prediction["sample_values"],
+                    "label": label,
+                }
+            )
+        if geo_results:
+            geo_df = pandas.DataFrame(geo_results)
+            if os.path.exists("geo_classifier_results.csv"):
+                mode = "a"
+                header = False
+            else:
+                mode = "w"
+                header = True
+            geo_df.to_csv(
+                "geo_classifier_results.csv", index=False, mode=mode, header=header
+            )
+            logger.info(
+                "Saved %d geo classifier results to geo_classifier_results.csv",
+                len(geo_results),
+            )
+
     logger.info(
         "[STEP 2/6] Geo batch prediction completed in %.3fs (%d columns)",
         step_times["2_geo_batch_predict"],

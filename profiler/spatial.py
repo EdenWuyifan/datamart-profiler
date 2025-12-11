@@ -787,7 +787,6 @@ class GeoClassifier:
         with open(self.model_dir / "label_encoder.json") as f:
             config = json.load(f)
 
-        print(config)
         self.classes = config["classes"]
         self.mode = config.get("mode", "classification")
         self.model_name = config.get("model_name", "BAAI/bge-small-en-v1.5")
