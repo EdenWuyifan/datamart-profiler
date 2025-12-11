@@ -253,11 +253,42 @@ def process_column(
             array, column_meta["name"], geo_data, manual
         )
 
-    logger.info(
-        "Column type %s [%s]",
-        structural_type,
-        ", ".join(semantic_types_dict),
-    )
+    # Log column type with source information
+    if used_geo_prediction:
+        geo_info = additional_meta.get("geo_classifier", {})
+        label = geo_info.get("label", "unknown")
+        confidence = geo_info.get("confidence", 0.0)
+        source = geo_info.get("source", "ml")
+
+        # Get sample values for logging
+        column_name = column_meta.get("name", "unknown")
+        sample_values = []
+        seen = set()
+        for v in array[:10]:
+            v_str = str(v).strip()
+            if v_str and v_str not in seen:
+                seen.add(v_str)
+                sample_values.append(v_str)
+                if len(sample_values) >= 3:
+                    break
+        samples_str = ", ".join(sample_values[:3])
+
+        logger.info(
+            "Column type %s [%s] (from geo_classifier: column=%r, label=%s, confidence=%.4f, source=%s, samples=[%s])",
+            structural_type,
+            ", ".join(semantic_types_dict),
+            column_name,
+            label,
+            confidence,
+            source,
+            samples_str,
+        )
+    else:
+        logger.info(
+            "Column type %s [%s]",
+            structural_type,
+            ", ".join(semantic_types_dict),
+        )
 
     # Set structural type
     column_meta["structural_type"] = structural_type
@@ -427,6 +458,7 @@ def process_dataset(
     nominatim=None,
     geo_data=None,
     geo_classifier=True,
+    geo_classifier_threshold=0.5,
     include_sample=False,
     coverage=True,
     plots=False,
@@ -443,6 +475,9 @@ def process_dataset(
     :param nominatim: URL of the Nominatim server
     :param geo_data: ``True`` or a datamart_geo.GeoData instance to use to
         resolve named administrative territorial entities
+    :param geo_classifier_threshold: Confidence threshold for geo_classifier
+        predictions (default: 0.85). Predictions below this threshold will be
+        treated as "non_spatial".
     :param include_sample: Set to True to include a few random rows to the
         result. Useful to present to a user.
     :param coverage: Whether to compute data ranges
@@ -579,7 +614,9 @@ def process_dataset(
         # BATCH PREDICTION - single forward pass for ALL columns!
         if columns_for_batch:
             batch_inputs = [(name, vals) for _, name, vals in columns_for_batch]
-            batch_results = geo_classifier.predict_batch(batch_inputs, threshold=0.85)
+            batch_results = geo_classifier.predict_batch(
+                batch_inputs, threshold=geo_classifier_threshold
+            )
 
             for (column_idx, name, _), prediction in zip(
                 columns_for_batch, batch_results
