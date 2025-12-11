@@ -10,3 +10,11 @@ __pycache__
 oscur_datasets
 *.ipynb
 auctus
+
+results
+output
+tmp*
+*checkpoint*
+
+model
+*.bak
