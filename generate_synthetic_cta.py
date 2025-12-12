@@ -40,24 +40,57 @@ def generate_synthetic_prompt(column_name: str, column_values: str, label: str) 
     """Generate prompt for LLM to create synthetic training samples."""
     num_values = 3
 
+    # Labels that can be fully synthesized without example values to avoid homogenization
+    fully_synthesizable_labels = {
+        "zip5",
+        "zip9",
+        "latitude",
+        "longitude",
+        "x_coord",
+        "y_coord",
+        "city",
+        "state",
+        "state_code",
+        "country",
+        "borough",
+        "borough_code",
+        "bbl",
+        "bin",
+    }
+
+    include_examples = label not in fully_synthesizable_labels
+
+    examples_section = ""
+    dont_copy_instruction = ""
+    never_reuse_instruction = ""
+
+    if include_examples:
+        examples_section = f"  - Column values (sample): {column_values}\n"
+        examples_note = f"Each alternative should have {num_values} NEWLY GENERATED values (do NOT copy the examples)."
+        dont_copy_instruction = (
+            "- DO NOT copy or trivially paraphrase the provided example values,\n   "
+        )
+        never_reuse_instruction = "- NEVER reuse the exact example values; generate new ones in similar ranges or domains.\n"
+    else:
+        examples_note = f"Each alternative should have {num_values} NEWLY GENERATED values based solely on the label rules below."
+
     return f"""You are a synthetic tabular data generator used from a Python program.
 
-Your job is: given a table column name, its semantic label (one of a fixed set), a naming style, and a few example values, you must:
+Your job is: given a table column name, its semantic label (one of a fixed set), a naming style{', and example values' if include_examples else ''}, you must:
 
 1. Propose THREE UNIQUE alternative column names that follow the requested naming convention.
 2. For EACH alternative column name, generate a list of NEW sample values that:
    - Match the semantic label,
    - Are realistic for UNITED STATES data only,
-   - DO NOT copy or trivially paraphrase the provided example values,
-   - Obey the strict constraints below for that label.
+   {dont_copy_instruction}- Obey the strict constraints below for that label.
+   - IMPORTANT for zip5/zip9: All ZIP codes in the same column must be from the SAME US state.
 
 
-  Given the table column: 
+  Given the table column:
   - Column name: '{column_name}'
-  - Column values (sample): {column_values}
-  - Label: '{label}'
+{examples_section} - Label: '{label}'
 
-  Each alternative should have {num_values} NEWLY GENERATED values (do NOT copy the examples).
+  {examples_note}
   
   Format output EXACTLY as:
   alt_name_1, val1, val2, val3; alt_name_2, val1, val2, val3; alt_name_3, val1, val2, val3
@@ -66,8 +99,7 @@ Your job is: given a table column name, its semantic label (one of a fixed set),
 You MUST:
 - Make all THREE alternative names distinct in wording.
 - Generate exactly {num_values} values per alternative name.
-- NEVER reuse the exact example values; generate new ones in similar ranges or domains.
-- Do NOT add quotes, brackets, extra text, or newlines.
+{never_reuse_instruction}- Do NOT add quotes, brackets, extra text, or newlines.
 
 All data must be US-focused. Use the following label-specific rules:
 
@@ -88,17 +120,20 @@ All data must be US-focused. Use the following label-specific rules:
 - Use 3–7 decimal places.
 
 3) label = "x_coord"  (spatial)
-- Projected X coordinate, large magnitude (e.g., Web Mercator / State Plane).
-- Numeric values with magnitude ~1,000,000–15,000,000 in ABSOLUTE value.
-- Use integers or floats with few decimals: -9735653, -8234567.12.
-- No commas; single number per value.
-- Should typically be NEGATIVE for US if you mimic Web Mercator (but not strictly required; keep large magnitude).
+- Generate ONLY values that look like real projected coordinates (e.g., State Plane or Web Mercator).
+- Values MUST follow:
+  - Usually negative (for Web Mercator in US)
+  - Magnitude between ~1,000,000 and ~15,000,000
+  - Minimal decimals (0–2 decimal places)
+- Column names associated with x_coord MUST contain signals like: "x", "east", "easting", "map_x", "x_coord".
 
 4) label = "y_coord"  (spatial)
-- Projected Y coordinate, large magnitude.
-- Numeric values ~2,000,000–7,000,000 for US.
-- Integers or floats, e.g. 3123456, 4567890.75.
-- No commas; single number per value.
+- Generate ONLY values that look like real projected coordinates (e.g., State Plane or Web Mercator).
+- Values MUST follow:
+  - Usually positive (for Web Mercator in US)
+  - Magnitude between ~2,000,000 and ~7,000,000
+  - Minimal decimals (0–2 decimal places)
+- Column names associated with y_coord MUST contain signals like: "y", "north", "northing", "map_y", "y_coord".
 
 5) label = "point"  (spatial)
 - Represent a geographic point ONLY as WKT POINT, in (lon lat) order.
@@ -135,21 +170,28 @@ All data must be US-focused. Use the following label-specific rules:
 - Use 4–15 vertices per polygon.
 
 10) label = "borough"  (spatial)
-- Represents US borough-level or similar sub-city administrative units.
+- This label should ONLY generate REAL U.S. borough names.
 - Values may include:
   - Named boroughs in large US cities (e.g., "Brooklyn", "Queens", "Staten Island"),
   - Alaska boroughs (e.g., "Anchorage Borough", "Matanuska-Susitna Borough"),
   - Other “borough”-style or district names used in US municipalities (e.g., "North Borough", "Downtown Borough").
 - Mostly Title Case; you may occasionally use ALL CAPS.
-- Do NOT generate raw numeric codes here (those belong to "borough_code").
+- DO NOT generate:
+  - School districts, counties, facilities, organizations, or generic nouns.
+- If a value does NOT clearly correspond to a real borough, it MUST NOT appear in synthetic data.
 
 11) label = "borough_code"  (spatial)
-- Represents codes for boroughs or similar sub-city units in the US.
-- Values can be:
-  - Small integers (e.g., 1, 2, 3, 10, 12),
-  - Or short alphanumeric codes (e.g., B1, Q2, AB-03) if plausible as district/borough codes.
-- Use plain tokens with digits and optional letters; avoid full names.
-- NEVER include full borough names or words like "Borough" in this label.
+- ONLY generate numeric codes for boroughs when directly corresponding to known boroughs.
+  NYC borough codes: 1,2,3,4,5
+  Optional: Alaska borough codes, but ONLY if consistent with real borough naming conventions.
+- Values MUST be:
+  - 1–3 digit numeric codes, OR
+  - UPPERCASE short alphanumeric codes used strictly as official borough identifiers.
+- DO NOT generate:
+  - Generic small integers
+  - Age bins, count bins, demographic codes
+  - School district codes, county identifiers, or FIPS codes
+  - Booleans, letters, or categorical values
 
 12) label = "city"  (spatial)
 - US city/town names ONLY; no state, no zip code.
@@ -186,14 +228,34 @@ All data must be US-focused. Use the following label-specific rules:
 - 5-digit US ZIP codes as strings.
 - Pattern: exactly 5 digits, leading zeros allowed: "02115", "10001", "60616", "94110".
 - NEVER add a dash or extra digits.
-- Use ZIP patterns from any US state (not NYC-specific).
+- CRITICAL: For the same column, ALL ZIP codes MUST be from the SAME US state.
+- Generate DIVERSE ZIP codes - avoid repeating the same ZIP code within a column.
+- Use the first 1-3 digits to identify the state/region:
+  - 0: CT, MA, ME, NH, NJ, PR, RI, VT (e.g., 02115, 06101, 07302, 02901)
+  - 1: DE, NY, PA (e.g., 10001, 19019, 19701)
+  - 2: DC, MD, NC, SC, VA, WV (e.g., 20001, 21201, 28201)
+  - 3: AL, FL, GA, MS, TN (e.g., 30301, 33101, 36101)
+  - 4: IN, KY, MI, OH (e.g., 46201, 40201, 48201)
+  - 5: IA, MN, MT, ND, SD, WI (e.g., 55401, 53701, 59101)
+  - 6: IL, KS, MO, NE (e.g., 60601, 64101, 66101)
+  - 7: AR, LA, OK, TX (e.g., 75201, 73101, 70112)
+  - 8: AZ, CO, ID, NM, NV, UT, WY (e.g., 85001, 80201, 84101)
+  - 9: AK, CA, HI, OR, WA (e.g., 94110, 97201, 98101, 99501)
+- When generating for a column, pick ONE state and use ZIP codes from that state's range only.
+- Vary the last 2-4 digits to create different ZIP codes within the chosen state.
 
 17) label = "zip9"  (spatial)
 - ZIP+4 codes.
 - Pattern: 5 digits, dash, 4 digits (exactly 10 characters).
-  - e.g. "02115-1234", "10001-0001".
+  - e.g. "02115-1234", "10001-0001", "60616-7890".
 - Do NOT omit the dash or shorten the groups.
-- Use plausible US ZIP+4 combinations from any US region.
+- CRITICAL: For the same column, ALL ZIP+4 codes MUST share the same 5-digit base ZIP code prefix from the SAME US state.
+- Generate DIVERSE ZIP+4 codes - vary both the base ZIP (if from same state) and the +4 extension.
+- Follow the same state-based ZIP code ranges as zip5 (see label 16 above).
+- When generating for a column:
+  - Option A: Use the SAME base ZIP code with different +4 extensions (e.g., "10001-1234", "10001-5678", "10001-9012")
+  - Option B: Use DIFFERENT base ZIP codes from the SAME state with varying +4 extensions (e.g., "10001-1234", "10002-5678", "10003-9012")
+- Vary the +4 extension digits (last 4 digits after the dash) to ensure diversity.
 
 18) label = "address"  (spatial)
 - US street/residence addresses. Each value MUST look like a real postal-style address fragment.
@@ -231,12 +293,19 @@ All data must be US-focused. Use the following label-specific rules:
 21) label = "non_spatial"  (NON-spatial)
 - Values MUST NOT encode recognizable spatial/location information.
 - Good options:
-  - Person names: Alice, Bob, Charlie Brown, John Doe, etc.
-  - Generic IDs: A12345, USER_00123, ID-98765 (avoid pure 5-digit or 7-digit numerics).
-  - Categorical labels: High, Medium, Low; Yes, No; Pending, Approved, Rejected.
-  - Numeric measures: 0, 1, 12, 250, 3.14, 0.75 (avoid values that look exactly like lat/lon or x/y ranges).
-  - Dates/times: 2024-01-15, 2023-12-31 10:30:00.
-  - Generic notes: Patient reported mild symptoms; Order shipped on Monday.
+  - Person names: Alice, Bob, Charlie Brown, John Doe
+  - Generic IDs: A12345, USER_00123, ID-98765 (avoid pure 5-digit or 7-digit numerics to prevent confusion with ZIP/BIN)
+  - Categorical labels: High, Medium, Low; Yes, No; Pending, Approved, Rejected
+  - Boolean flags: True, False
+  - Numeric counts or measures: 0, 1, 12, 250, 3.14, 0.75
+    (avoid ranges that resemble coordinates, ZIPs, or projected X/Y values)
+  - Long-form numeric or mixed-case identifiers:
+    e.g., "0002271970", "ZZSEZCSJ", "MW-9", "ACC-0001"
+  - Dates or timestamps: 2024-01-15, 2023-12-31 10:30:00
+  - Descriptive or administrative text:
+    e.g., "Patient reported mild symptoms", "Order shipped on Monday", "Authorized Representative"
+  - Demographic or categorical dimensions:
+    age bins, race categories, marital status, insurance type, staff/patient counts, case metrics
 - Avoid:
   - Anything that matches ZIP, BIN, BBL, POINT/LINESTRING/POLYGON/etc., city/state/country names, or address formats.
 
@@ -293,6 +362,12 @@ def main():
         default=120,
         help="Target number of synthetic samples per class",
     )
+    parser.add_argument(
+        "--target-labels",
+        type=str,
+        default=None,
+        help="Comma-separated list of target labels to generate synthetic data for",
+    )
     args = parser.parse_args()
 
     # Load curated data
@@ -320,7 +395,10 @@ def main():
         print(f"\nExisting samples per label: {existing_counts}")
 
     # Get unique labels from curated data
-    unique_labels = curated_df["Label"].unique()
+    if args.target_labels:
+        unique_labels = [label.strip() for label in args.target_labels.split(",")]
+    else:
+        unique_labels = curated_df["Label"].unique()
     print(f"\nTarget: {args.target} samples per class")
     print(f"Unique labels: {len(unique_labels)}")
 
