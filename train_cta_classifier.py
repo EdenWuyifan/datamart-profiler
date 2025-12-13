@@ -24,7 +24,7 @@ Usage (Curriculum Learning - Recommended):
 import argparse
 import json
 import os
-from collections import defaultdict
+import random
 from pathlib import Path
 
 import numpy as np
@@ -34,7 +34,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from torch.utils.data import DataLoader, Dataset, Sampler
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import (
     AutoConfig,
@@ -107,6 +107,48 @@ def get_device():
     return device
 
 
+def encode_all(model, loader, device):
+    model.eval()
+    all_emb = []
+    all_labels = []
+    all_idx = []
+    with torch.no_grad():
+        for batch in loader:
+            emb = model.get_embeddings(
+                batch["input_ids"].to(device),
+                batch["attention_mask"].to(device),
+            )  # (b, d), normalized already
+            all_emb.append(emb.cpu())
+            all_labels.append(batch["labels"].cpu())
+            all_idx.append(batch["idx"].cpu())
+    return torch.cat(all_emb), torch.cat(all_labels), torch.cat(all_idx)
+
+
+def mine_hard_negatives_cosine(embeddings, labels, topk=50, hard_k=20):
+    """
+    embeddings: (N, d) normalized
+    labels: (N,)
+    Return: dict i -> list of mined negative indices (global indices)
+    """
+    # cosine sim = dot product (since normalized)
+    sim = embeddings @ embeddings.T  # (N, N)
+    sim.fill_diagonal_(-1e9)
+
+    # get topk nearest neighbors for each i
+    nn_scores, nn_idx = torch.topk(sim, k=min(topk, embeddings.size(0) - 1), dim=1)
+
+    hard_negs = {}
+    labels_np = labels.numpy()
+
+    for i in range(embeddings.size(0)):
+        yi = labels_np[i]
+        nbrs = nn_idx[i].tolist()
+        # different label neighbors are hard negatives
+        negs = [j for j in nbrs if labels_np[j] != yi]
+        hard_negs[i] = negs[:hard_k]
+    return hard_negs
+
+
 # ============================================================================
 # Data Loading
 # ============================================================================
@@ -167,83 +209,93 @@ class CTADataset(Dataset):
         }
 
 
-class ContrastiveDataset(Dataset):
-    """Dataset for contrastive learning with anchor-positive pairs."""
+class EmbedDataset(Dataset):
+    """Single-view dataset used to embed all samples for mining."""
 
     def __init__(self, texts, labels, tokenizer, max_length=128):
         self.texts = texts
         self.labels = np.array(labels)
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.label_to_indices = defaultdict(list)
-        for idx, label in enumerate(labels):
-            self.label_to_indices[label].append(idx)
 
     def __len__(self):
         return len(self.texts)
 
     def __getitem__(self, idx):
-        anchor_text, anchor_label = self.texts[idx], self.labels[idx]
-        pos_indices = self.label_to_indices[anchor_label]
-        pos_idx = np.random.choice([i for i in pos_indices if i != idx] or [idx])
-
-        def encode(text):
-            return self.tokenizer(
-                text, truncation=True, padding="max_length", max_length=self.max_length
-            )
-
-        anchor_enc = encode(anchor_text)
-        pos_enc = encode(self.texts[pos_idx])
-
+        enc = self.tokenizer(
+            self.texts[idx],
+            truncation=True,
+            padding="max_length",
+            max_length=self.max_length,
+        )
         return {
-            "anchor_input_ids": torch.tensor(anchor_enc["input_ids"]),
-            "anchor_attention_mask": torch.tensor(anchor_enc["attention_mask"]),
-            "pos_input_ids": torch.tensor(pos_enc["input_ids"]),
-            "pos_attention_mask": torch.tensor(pos_enc["attention_mask"]),
-            "labels": torch.tensor(anchor_label),
+            "input_ids": torch.tensor(enc["input_ids"]),
+            "attention_mask": torch.tensor(enc["attention_mask"]),
+            "labels": torch.tensor(int(self.labels[idx])),
+            "idx": torch.tensor(idx),
         }
 
 
-class StratifiedBatchSampler(Sampler):
-    """Stratified batch sampler: L labels × K samples per label."""
+class TripletContrastiveDataset(Dataset):
+    """
+    Uses mined hard negatives.
+    Each sample returns (anchor, positive, negative).
+    """
 
-    def __init__(
-        self, labels, batch_size, samples_per_label=2, seed=42, drop_last=True
-    ):
+    def __init__(self, texts, labels, hard_negs, tokenizer, max_length=128):
+        self.texts = texts
         self.labels = np.array(labels)
-        self.batch_size = batch_size
-        self.k = samples_per_label
-        assert batch_size % self.k == 0
-        self.num_labels_per_batch = batch_size // self.k
-        self.drop_last = drop_last
-        self.rng = np.random.default_rng(seed)
+        self.hard_negs = hard_negs  # dict: i -> list of neg indices
+        self.tokenizer = tokenizer
+        self.max_length = max_length
 
-        self.label_to_indices = defaultdict(list)
+        # label -> indices for positive sampling
+        self.label_to_indices = {}
         for i, y in enumerate(self.labels):
-            self.label_to_indices[int(y)].append(i)
-        self.unique_labels = np.array(list(self.label_to_indices.keys()))
-        n = len(self.labels)
-        self.num_batches = (
-            n // batch_size if drop_last else int(np.ceil(n / batch_size))
-        )
-
-    def __iter__(self):
-        for _ in range(self.num_batches):
-            num_labels = self.num_labels_per_batch
-            chosen = self.rng.choice(
-                self.unique_labels,
-                size=num_labels,
-                replace=len(self.unique_labels) < num_labels,
-            )
-            batch = []
-            for y in chosen:
-                inds = self.label_to_indices[int(y)]
-                picks = self.rng.choice(inds, size=self.k, replace=len(inds) < self.k)
-                batch.extend(picks.tolist())
-            yield batch
+            self.label_to_indices.setdefault(int(y), []).append(i)
 
     def __len__(self):
-        return self.num_batches
+        return len(self.texts)
+
+    def _encode(self, text):
+        enc = self.tokenizer(
+            text,
+            truncation=True,
+            padding="max_length",
+            max_length=self.max_length,
+        )
+        return torch.tensor(enc["input_ids"]), torch.tensor(enc["attention_mask"])
+
+    def __getitem__(self, idx):
+        y = int(self.labels[idx])
+
+        # positive
+        pos_pool = self.label_to_indices[y]
+        pos_idx = random.choice([i for i in pos_pool if i != idx] or [idx])
+
+        # mined negative (fallback to random if missing)
+        neg_pool = self.hard_negs.get(idx, [])
+        if len(neg_pool) == 0:
+            # random negative label
+            other_labels = [k for k in self.label_to_indices.keys() if k != y]
+            neg_label = random.choice(other_labels)
+            neg_idx = random.choice(self.label_to_indices[neg_label])
+        else:
+            neg_idx = random.choice(neg_pool)
+
+        a_ids, a_mask = self._encode(self.texts[idx])
+        p_ids, p_mask = self._encode(self.texts[pos_idx])
+        n_ids, n_mask = self._encode(self.texts[neg_idx])
+
+        return {
+            "a_input_ids": a_ids,
+            "a_attention_mask": a_mask,
+            "p_input_ids": p_ids,
+            "p_attention_mask": p_mask,
+            "n_input_ids": n_ids,
+            "n_attention_mask": n_mask,
+            "labels": torch.tensor(y),
+        }
 
 
 # ============================================================================
@@ -304,6 +356,7 @@ class CTAClassificationModel(nn.Module):
 
         out = Output()
         out.loss = loss
+        out.pooled = pooled
         out.logits = logits
         if self.use_spatial_head:
             out.spatial_logits = self.spatial_head(pooled)
@@ -346,6 +399,15 @@ class CTAContrastiveModel(nn.Module):
 # ============================================================================
 # Loss Functions
 # ============================================================================
+
+
+def info_nce_triplet(a, p, n, temperature=0.07):
+    # a,p,n are normalized
+    pos = (a * p).sum(dim=1) / temperature
+    neg = (a * n).sum(dim=1) / temperature
+    logits = torch.stack([pos, neg], dim=1)  # (b, 2)
+    labels = torch.zeros(a.size(0), dtype=torch.long, device=a.device)
+    return F.cross_entropy(logits, labels)
 
 
 class SupConLoss(nn.Module):
@@ -396,8 +458,9 @@ class CombinedLoss(nn.Module):
 # ============================================================================
 
 
-def train_epoch(model, loader, device, optimizer=None, criterion=None, mode="train"):
-    """Generic training/validation epoch."""
+def train_epoch(
+    model, loader, device, optimizer=None, scheduler=None, criterion=None, mode="train"
+):
     is_train = mode == "train"
     model.train() if is_train else model.eval()
 
@@ -409,41 +472,42 @@ def train_epoch(model, loader, device, optimizer=None, criterion=None, mode="tra
             if is_train:
                 optimizer.zero_grad()
 
-            # Handle different batch formats
-            if "anchor_input_ids" in batch:  # Contrastive
-                anchor_emb = model.get_embeddings(
-                    batch["anchor_input_ids"].to(device),
-                    batch["anchor_attention_mask"].to(device),
-                )
-                pos_emb = model.get_embeddings(
-                    batch["pos_input_ids"].to(device),
-                    batch["pos_attention_mask"].to(device),
-                )
-                embeddings = torch.cat([anchor_emb, pos_emb], dim=0)
-                labels = torch.cat([batch["labels"].to(device)] * 2, dim=0)
-                loss = criterion(embeddings, labels)
-            else:  # Classification
-                spatial_labels = batch.get("spatial_labels")
-                if spatial_labels is not None:
-                    spatial_labels = spatial_labels.to(device)
+            # Classification
+            spatial_labels = batch.get("spatial_labels")
+            if spatial_labels is not None:
+                spatial_labels = spatial_labels.to(device)
 
-                outputs = model(
-                    input_ids=batch["input_ids"].to(device),
-                    attention_mask=batch["attention_mask"].to(device),
-                    labels=batch["labels"].to(device),
-                    spatial_labels=spatial_labels,
-                )
-                loss = outputs.loss
+            outputs = model(
+                input_ids=batch["input_ids"].to(device),
+                attention_mask=batch["attention_mask"].to(device),
+                labels=batch["labels"].to(device),
+                spatial_labels=spatial_labels,
+            )
 
-                if not is_train:
-                    preds = outputs.logits.argmax(dim=-1)
-                    correct += (preds == batch["labels"].to(device)).sum().item()
-                    total += len(batch["labels"])
+            labels = batch["labels"].to(device)
+            logits = outputs.logits
+
+            ce = F.cross_entropy(
+                logits, labels, label_smoothing=getattr(model, "label_smoothing", 0.0)
+            )
+
+            loss = ce
+            if getattr(model, "metric_alpha", 0.0) > 0:
+                feats = F.normalize(outputs.pooled, dim=1)
+                loss_con = SupConLoss(temperature=0.07)(feats, labels)
+                loss = ce + model.metric_alpha * loss_con
 
             if is_train:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
+                if scheduler is not None:
+                    scheduler.step()
+
+            if not is_train:
+                preds = outputs.logits.argmax(dim=-1)
+                correct += (preds == batch["labels"].to(device)).sum().item()
+                total += len(batch["labels"])
 
             total_loss += loss.item()
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
@@ -451,7 +515,7 @@ def train_epoch(model, loader, device, optimizer=None, criterion=None, mode="tra
     avg_loss = total_loss / len(loader)
     if is_train:
         return avg_loss
-    return avg_loss, correct / total if total > 0 else 0.0
+    return avg_loss, (correct / total if total > 0 else 0.0)
 
 
 def train_classification(
@@ -479,9 +543,10 @@ def train_classification(
 
     best_val_acc = 0
     for epoch in range(epochs):
-        train_loss = train_epoch(model, train_loader, device, optimizer, mode="train")
+        train_loss = train_epoch(
+            model, train_loader, device, optimizer, scheduler, mode="train"
+        )
         val_loss, val_acc = train_epoch(model, val_loader, device, mode="val")
-        scheduler.step()
 
         print(
             f"Epoch {epoch+1}/{epochs}: Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}, Val Acc={val_acc:.4f}"
@@ -498,107 +563,103 @@ def train_classification(
 
 def train_contrastive(
     model,
-    train_loader,
-    val_loader,
+    tokenizer,
+    train_texts,
+    train_labels,
+    val_texts,
+    val_labels,
     device,
-    epochs,
-    lr,
-    temperature,
+    epochs=10,
+    lr=2e-5,
+    temperature=0.07,
+    max_length=128,
+    batch_size=32,
+    mine_topk=50,
+    mine_hard_k=20,
     output_dir="./model_contrastive",
 ):
     """Contrastive learning training (Stage 1: pre-training)."""
     model.to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
-    criterion = SupConLoss(temperature)
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=int(0.1 * len(train_loader) * epochs),
-        num_training_steps=len(train_loader) * epochs,
-    )
+
+    # loader for embedding all samples each epoch
+    embed_ds = EmbedDataset(train_texts, train_labels, tokenizer, max_length)
+    embed_loader = DataLoader(embed_ds, batch_size=batch_size, shuffle=False)
 
     best_val_loss = float("inf")
+
     for epoch in range(epochs):
-        train_loss = train_epoch(
-            model, train_loader, device, optimizer, criterion, mode="train"
-        )
-        val_loss, _ = train_epoch(
-            model, val_loader, device, criterion=criterion, mode="val"
-        )
-        scheduler.step()
-
-        print(
-            f"Epoch {epoch+1}/{epochs}: Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}"
+        # 1) mine hard negatives using current model
+        embs, labs, _ = encode_all(model, embed_loader, device)
+        hard_negs = mine_hard_negatives_cosine(
+            embs, labs, topk=mine_topk, hard_k=mine_hard_k
         )
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            os.makedirs(output_dir, exist_ok=True)
-            torch.save(model.state_dict(), f"{output_dir}/model.pt")
-            print(f"  → Saved best model (loss={best_val_loss:.4f})")
+        # 2) build triplet dataset for this epoch
+        triplet_ds = TripletContrastiveDataset(
+            train_texts, train_labels, hard_negs, tokenizer, max_length=max_length
+        )
+        # Validation uses empty hard_negs (falls back to random negatives)
+        val_ds = TripletContrastiveDataset(
+            val_texts, val_labels, {}, tokenizer, max_length=max_length
+        )
+        train_loader = DataLoader(triplet_ds, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
-    return model
-
-
-def train_combined(
-    model,
-    train_loader,
-    val_loader,
-    device,
-    epochs,
-    lr,
-    temperature,
-    alpha,
-    output_dir="./model_combined",
-):
-    """Combined training (Stage 3: optional multi-task polish)."""
-    model.to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
-    criterion = CombinedLoss(temperature, alpha)
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=int(0.1 * len(train_loader) * epochs),
-        num_training_steps=len(train_loader) * epochs,
-    )
-
-    best_val_acc = 0
-    for epoch in range(epochs):
+        # 3) train
         model.train()
-        train_loss, train_con, train_ce = 0, 0, 0
+        train_loss = 0.0
         pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]")
-
         for batch in pbar:
             optimizer.zero_grad()
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
-            labels = batch["labels"].to(device)
 
-            embeddings = model.get_embeddings(input_ids, attention_mask)
-            logits = model(input_ids, attention_mask)
-            loss, loss_con, loss_ce = criterion(embeddings, logits, labels)
+            a = model.get_embeddings(
+                batch["a_input_ids"].to(device), batch["a_attention_mask"].to(device)
+            )
+            p = model.get_embeddings(
+                batch["p_input_ids"].to(device), batch["p_attention_mask"].to(device)
+            )
+            n = model.get_embeddings(
+                batch["n_input_ids"].to(device), batch["n_attention_mask"].to(device)
+            )
 
+            loss = info_nce_triplet(a, p, n, temperature=temperature)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
-            scheduler.step()
 
             train_loss += loss.item()
-            train_con += loss_con.item()
-            train_ce += loss_ce.item()
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
 
-        val_loss, val_acc = train_epoch(model, val_loader, device, mode="val")
+        # 4) validation (you can keep your current val loop; shown as loss-only)
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for batch in tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]"):
+                a = model.get_embeddings(
+                    batch["a_input_ids"].to(device),
+                    batch["a_attention_mask"].to(device),
+                )
+                p = model.get_embeddings(
+                    batch["p_input_ids"].to(device),
+                    batch["p_attention_mask"].to(device),
+                )
+                n = model.get_embeddings(
+                    batch["n_input_ids"].to(device),
+                    batch["n_attention_mask"].to(device),
+                )
 
-        print(
-            f"Epoch {epoch+1}/{epochs}: Loss={train_loss/len(train_loader):.4f} "
-            f"(Con={train_con/len(train_loader):.4f}, CE={train_ce/len(train_loader):.4f}), "
-            f"Val Acc={val_acc:.4f}"
-        )
+                loss = info_nce_triplet(a, p, n, temperature=temperature)
+                val_loss += loss.item()
+                pbar.set_postfix({"loss": f"{loss.item():.4f}"})
 
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
+        avg_val_loss = val_loss / len(val_loader)
+        print(f"Epoch {epoch+1}/{epochs}: Val Loss={avg_val_loss:.4f}")
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
             os.makedirs(output_dir, exist_ok=True)
             torch.save(model.state_dict(), f"{output_dir}/model.pt")
-            print(f"  → Saved best model (acc={val_acc:.4f})")
+            print(f"  → Saved best model (loss={best_val_loss:.4f})")
 
     return model
 
@@ -662,27 +723,23 @@ def run_contrastive(
     print("STAGE 1: Contrastive Pre-training")
     print("=" * 60)
 
-    train_ds = ContrastiveDataset(train_texts, train_labels, tokenizer, args.max_length)
-    val_ds = ContrastiveDataset(val_texts, val_labels, tokenizer, args.max_length)
-
     model = CTAContrastiveModel(embed_dim=args.embed_dim, num_labels=None)
     model.encoder.resize_token_embeddings(len(tokenizer))
 
-    batch_sampler = StratifiedBatchSampler(
-        train_labels, args.batch_size, samples_per_label=2, seed=args.seed
-    )
-    train_loader = DataLoader(train_ds, batch_sampler=batch_sampler)
-    val_loader = DataLoader(val_ds, batch_size=args.batch_size)
-
     train_contrastive(
         model,
-        train_loader,
-        val_loader,
+        tokenizer,
+        train_texts,
+        train_labels,
+        val_texts,
+        val_labels,
         device,
-        args.epochs,
-        args.lr,
-        args.temperature,
-        args.output_dir,
+        epochs=args.epochs,
+        lr=args.lr,
+        temperature=args.temperature,
+        max_length=args.max_length,
+        batch_size=args.batch_size,
+        output_dir=args.output_dir,
     )
     tokenizer.save_pretrained(args.output_dir)
     print(f"\n✅ Stage 1 complete! Encoder saved to {args.output_dir}/model.pt")
@@ -725,6 +782,8 @@ def run_fine_tune(
     )
     model.encoder.resize_token_embeddings(len(tokenizer))
     model.load_encoder_weights(args.load_encoder_from, strict=False)
+    model.metric_alpha = args.metric_alpha
+    model.label_smoothing = args.label_smoothing
 
     if args.freeze_encoder:
         model.freeze_encoder()
@@ -782,6 +841,9 @@ def run_combined(
         val_texts, val_labels, tokenizer, non_spatial_id, args.max_length
     )
 
+    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=args.batch_size)
+
     checkpoint_dir = (
         Path(args.load_encoder_from).parent if args.load_encoder_from else None
     )
@@ -791,29 +853,39 @@ def run_combined(
         else None
     )
 
-    model = CTAContrastiveModel(
-        embed_dim=args.embed_dim, num_labels=num_labels, config=config
+    # IMPORTANT: use CTAClassificationModel so train_epoch works (labels, pooled, logits)
+    model = CTAClassificationModel(
+        num_labels, config=config, use_spatial_head=args.use_spatial_head
     )
     model.encoder.resize_token_embeddings(len(tokenizer))
 
-    if args.load_encoder_from and Path(args.load_encoder_from).exists():
-        print(f"Loading encoder from {args.load_encoder_from}...")
-        load_encoder_weights(model, args.load_encoder_from, strict=False)
+    # IMPORTANT: load the FULL fine-tune checkpoint (encoder + classifier)
+    state = torch.load(args.load_encoder_from, map_location="cpu")
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    print("Loaded full checkpoint for Stage 3")
+    print("Missing keys:", missing)
+    print("Unexpected keys:", unexpected)
 
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=args.batch_size)
+    # Stage 3 = small supervised contrastive regularizer
+    model.metric_alpha = args.alpha
+    model.label_smoothing = args.label_smoothing
 
-    train_combined(
+    # Use lower LR than stage2 (polish)
+    lr = min(args.lr, 1e-5)
+    encoder_lr = min(args.encoder_lr, lr) if args.encoder_lr is not None else None
+
+    train_classification(
         model,
         train_loader,
         val_loader,
         device,
-        args.epochs,
-        args.lr,
-        args.temperature,
-        args.alpha,
-        args.output_dir,
+        epochs=args.epochs,
+        lr=lr,
+        encoder_lr=encoder_lr,
+        freeze_encoder=False,
+        output_dir=args.output_dir,
     )
+
     tokenizer.save_pretrained(args.output_dir)
     print(f"\n✅ Stage 3 complete! Model saved to {args.output_dir}/model.pt")
     return model
@@ -884,6 +956,18 @@ Curriculum Learning Pipeline:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--name_repeat", type=int, default=3)
     parser.add_argument("--use_spatial_head", action="store_true")
+    parser.add_argument(
+        "--metric_alpha",
+        type=float,
+        default=0.1,
+        help="Aux supervised contrastive weight during fine-tune (try 0.05-0.2)",
+    )
+    parser.add_argument(
+        "--label_smoothing",
+        type=float,
+        default=0.05,
+        help="Cross-entropy label smoothing (try 0.05-0.1)",
+    )
     args = parser.parse_args()
 
     # Setup

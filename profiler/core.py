@@ -45,7 +45,8 @@ GEO_CLASSIFIER_SPATIAL_MAP = {
     "line": (types.GEO_POLYGON, []),
     "multi-line": (types.GEO_POLYGON, []),
     # Address-related
-    "zip_code": (types.TEXT, [types.ADDRESS]),
+    "zip5": (types.TEXT, [types.ADDRESS]),
+    "zip9": (types.TEXT, [types.ADDRESS]),
     "address": (types.TEXT, [types.ADDRESS]),
     # Administrative areas
     "borough": (
@@ -55,6 +56,7 @@ GEO_CLASSIFIER_SPATIAL_MAP = {
     "borough_code": (types.TEXT, [types.ADMIN]),  # Borough codes (numeric/alphanumeric)
     "city": (types.TEXT, [types.ADMIN]),
     "state": (types.TEXT, [types.ADMIN]),
+    "state_code": (types.TEXT, [types.ADMIN]),
     "country": (types.TEXT, [types.ADMIN]),
     # NYC-specific identifiers (spatial context)
     "bbl": (types.INTEGER, [types.ID]),
