@@ -2399,3 +2399,1109 @@ borough_num,"101, 302, 501",borough_code
 boro_id,"3, 5, 4",borough_code
 borough_identifier,"BX, MN, BK",borough_code
 b_code,"101, 305, 502",borough_code
+reporting_year,"2022, 2023, 2024",non_spatial
+financial_year,"FY2021, FY2022, FY2023",non_spatial
+budget_period,"2022-2023, 2023-2024, 2024-2025",non_spatial
+is_grant_awarded,"1, 0, 1",non_spatial
+grant_status,"Approved, Rejected, Pending",non_spatial
+grant_approved_flag,"Yes, No, Yes",non_spatial
+fiscal_week_of_entry,"15, 53, 62",non_spatial
+reporting_week_id,"5, 31, 70",non_spatial
+study_week_number,"1, 45, 88",non_spatial
+resident_positive_count,"22, 75, 49",non_spatial
+cases_among_residents,"8, 103, 91",non_spatial
+num_resident_infections,"15, 44, 112",non_spatial
+resident_fatalities,"4, 3, 5",non_spatial
+deceased_resident_count,"7, 6, 4",non_spatial
+mortality_count,"9, 11, 8",non_spatial
+docket_num,"0003158821, 0002994017, 0003045698",non_spatial
+case_id_ref,"0004582109, 0004112358, 0003987654",non_spatial
+record_tracking_nbr,"0001889234, 0002543987, 0002765111",non_spatial
+ucc_filing_id,"0004519872, 0003098765, 0006123456",non_spatial
+document_control_num,"0008765432, 0001112233, 0009988776",non_spatial
+filing_reference_id,"0002581470, 0003692581, 0007418529",non_spatial
+recreational_sales_usd,"1624501.75, 1499823.10, 1588112.99",non_spatial
+taxable_revenue,"987543.21, 1123456.78, 1050600.50",non_spatial
+total_product_volume,"2105432.5, 1987345.2, 2050111.75",non_spatial
+healthcare_costs,"1543289.50, 3105677.12, 987543.21",non_spatial
+claim_amount,"2150998.75, 1987450.00, 450123.99",non_spatial
+insurance_payout,"1654321.80, 2400500.25, 3012876.55",non_spatial
+is_processed,"True, False, True",non_spatial
+review_status,"Approved, Pending, Rejected",non_spatial
+item_count,"4, 12, 8",non_spatial
+count_age_35_44,"1, 4, 8",non_spatial
+RespondentsAged35to44,"3, 7, 12",non_spatial
+age_group_35_44_n,"6, 1, 9",non_spatial
+_25_34,"5, 1, 16",non_spatial
+_55_64,"2, 9, 21",non_spatial
+_65_plus,"4, 12, 7",non_spatial
+age_55_64_count,"5, 1, 10",non_spatial
+population_55_to_64,"9, 0, 6",non_spatial
+num_persons_55_64,"3, 12, 8",non_spatial
+has_prek,"Yes, No, Yes",non_spatial
+student_count,"28, 150, 320",non_spatial
+program_type,"General Education, After School, STEM Focus",non_spatial
+is_approved,"True, False, True",non_spatial
+priority_level,"High, Medium, Low",non_spatial
+compliance_status,"Compliant, Non-Compliant, Under Review",non_spatial
+ethnicity_id,"3, 5, 10",non_spatial
+demographic_race_key,"4, 6, 12",non_spatial
+race_identifier,"7, 8, 15",non_spatial
+account_net_worth,"1520391.55, -847200.10, 4201888.0",non_spatial
+portfolio_value,"7892345.67, 210987.33, -123456.78",non_spatial
+current_assets,"9980450.0, -250000.0, 6051234.99",non_spatial
+total_sales_amount,"8502145, 6912345, 10250000",non_spatial
+income_generated,"5432109.87, 12345678.90, 8877665.50",non_spatial
+gross_receipts,"9100500, 7854321, 6549870",non_spatial
+pop_density_level,"3, 4, 5",non_spatial
+population_group,"10, 11, 12",non_spatial
+demographic_cluster_id,"1, 3, 5",non_spatial
+state_fips_code,"06, 48, 12",non_spatial
+geo_id,"53, 08, 36",non_spatial
+location_code,"17, 39, 04",non_spatial
+borough_id,"3, 4, 5",borough_code
+b_code,"170, 122, 90",borough_code
+boro_identifier,"20, 110, 130",borough_code
+boro_id,"3, 4, 5",borough_code
+borough_num_code,"110, 020, 170",borough_code
+borough_abbreviation,"BRX, QNS, SI",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_id,"5, 3, 4",borough_code
+b_code,"4, 5, 3",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_code,"5, 3, 4",borough_code
+borough_num,"4, 5, 3",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_num,"5, 1, 3",borough_code
+nyc_boro_code,"4, 2, 1",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_id,"3, 4, 5",borough_code
+borough_num,"3, 4, 5",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_id,"11, 102, 16",borough_code
+borough_num,"220, 31, 8",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_id,"3, QN, BX",borough_code
+borough_identifier,"MN, BK, SI",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_num,"5, 4, 3",borough_code
+borough_identifier,"4, 3, 5",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_id,"5, 1, 4",borough_code
+b_code,"2, 3, 1",borough_code
+boro_id,"3, 4, 5",borough_code
+borough_identifier,"110, 130, 180",borough_code
+borough_num_code,"MN, BX, SI",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_code_alpha,"BK, MN, QN",borough_code
+borough_abbreviation,"BX, SI, M",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_num,"101, 202, 303",borough_code
+borough_identifier,"MN, BK, QN",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_num,"122, 130, 164",borough_code
+b_code,"20, 60, 90",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_code,"110, 122, 130",borough_code
+borough_identifier,"MN, BX, SI",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_code_num,"101, 102, 103",borough_code
+b_code,"11, 21, 31",borough_code
+borough_id,"5, 020, 150",borough_code
+boro_code,"4, 050, 275",borough_code
+boro_num,"3, 110, 180",borough_code
+boro_id,"3, 4, 5",borough_code
+borough_identifier,"5, 3, 4",borough_code
+boro_num,"4, 5, 3",borough_code
+borough_id,"3, 4, 5",borough_code
+b_code,"BK, QN, SI",borough_code
+boro_num,"122, 130, 170",borough_code
+borough_id,"3, 4, 5",borough_code
+b_code,"5, 3, 4",borough_code
+boro_code,"4, 3, 5",borough_code
+BoroughName,"Manhattan, The Bronx, Fairbanks North Star Borough",borough
+borough_division,"Kenai Peninsula Borough, Juneau Borough, Kodiak Island Borough",borough
+MUNICIPAL_BOROUGH,"Anchorage Borough, Denali Borough, Bristol Bay Borough",borough
+MUNICIPAL_BOROUGH,"STATEN ISLAND, THE BRONX, JUNEAU BOROUGH",borough
+BOROUGH_NAME,"Anchorage, Fairbanks North Star, Kenai Peninsula",borough
+CITY_BOROUGH,"MATANUSKA-SUSITNA, KETCHIKAN GATEWAY, NORTH SLOPE",borough
+BoroName,"The Bronx, Staten Island, Matanuska-Susitna Borough",borough
+municipality_borough,"Fairbanks North Star Borough, Kenai Peninsula Borough, West Chester",borough
+AdminBorough,"Anchorage, Juneau, Doylestown",borough
+Borough_Name,"Brooklyn, The Bronx, Staten Island",borough
+Municipality_Borough,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau Borough",borough
+borough_division,"West Chester Borough, Doylestown Borough, Matanuska-Susitna Borough",borough
+boro_name,"The Bronx, Manhattan, Queens",borough
+MunicipalBorough,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau City and Borough",borough
+Borough_Designation,"Staten Island, Brooklyn, Anchorage Borough",borough
+CommunityBorough,"Staten Island, The Bronx, Juneau Borough",borough
+borough_name,"Fairbanks North Star Borough, Kenai Peninsula Borough, Matanuska-Susitna Borough",borough
+AdminBorough,"West Chester, Doylestown, ANCHORAGE",borough
+boro,"STATEN ISLAND, The Bronx, Matanuska-Susitna Borough",borough
+administrative_district,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau",borough
+BoroughName,"Denali Borough, Ketchikan Gateway Borough, Sitka",borough
+BoroName,"The Bronx, Staten Island, Fairbanks North Star Borough",borough
+admin_borough,"Kenai Peninsula Borough, Juneau Borough, North Slope Borough",borough
+BOROUGH_JURISDICTION,"Denali Borough, Haines Borough, Ketchikan Gateway Borough",borough
+borough_name,"Staten Island, The Bronx, Fairbanks North Star Borough",borough
+MunicipalityBorough,"Kenai Peninsula Borough, Anchorage Borough, Matanuska-Susitna Borough",borough
+Admin_District,"Juneau City and Borough, West Chester, Doylestown",borough
+Borough_Name,"The Bronx, Staten Island, Matanuska-Susitna Borough",borough
+BORO_NAME,"ANCHORAGE, JUNEAU, SITKA",borough
+Jurisdiction,"State College, Kenai Peninsula Borough, West Chester",borough
+borough_name,"Brooklyn, Staten Island, Fairbanks North Star Borough",borough
+MUNICIPAL_BOROUGH,"Kenai Peninsula Borough, ANCHORAGE BOROUGH, Juneau Borough",borough
+Borough,"Matanuska-Susitna Borough, Ketchikan Gateway Borough, Sitka Borough",borough
+Borough_Name,"Staten Island, The Bronx, Kenai Peninsula Borough",borough
+BOROUGH,"STATEN ISLAND, ALEUTIANS EAST BOROUGH, LAKE AND PENINSULA BOROUGH",borough
+jurisdiction_borough,"The Bronx, North Slope Borough, Denali Borough",borough
+boro,"Brooklyn, Staten Island, Anchorage Borough",borough
+Borough_Name,"Fairbanks North Star Borough, Kenai Peninsula Borough, Matanuska-Susitna Borough",borough
+BOROUGH_DISTRICT,"GETTYSBURG, DOYLESTOWN, JUNEAU",borough
+BoroughName,"Staten Island, The Bronx, Fairbanks North Star Borough",borough
+municipal_borough,"State College, Metuchen, Doylestown",borough
+JurisdictionBorough,"Kenai Peninsula Borough, Juneau, Ketchikan Gateway Borough",borough
+borough_name,"Brooklyn, Staten Island, Fairbanks North Star Borough",borough
+Borough,"Kenai Peninsula Borough, Juneau, Ketchikan Gateway Borough",borough
+municipality_borough,"North Slope Borough, ANCHORAGE, Haines Borough",borough
+borough_name,"Brooklyn, Staten Island, Anchorage Borough",borough
+location_borough,"Fairbanks North Star Borough, Matanuska-Susitna Borough, Juneau Borough",borough
+site_borough,"Kenai Peninsula Borough, Ketchikan Gateway Borough, NORTH SLOPE BOROUGH",borough
+Borough_Name,"Staten Island, The Bronx, Fairbanks North Star Borough",borough
+Admin_Borough,"Juneau Borough, Matanuska-Susitna Borough, Kenai Peninsula Borough",borough
+City_Borough,"Anchorage Borough, Sitka Borough, Haines Borough",borough
+boro,"STATEN ISLAND, The Bronx, Anchorage Borough",borough
+borough_name,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau Borough",borough
+JurisdictionBorough,"Matanuska-Susitna Borough, Bristol Bay Borough, Kodiak Island Borough",borough
+boro_name,"STATEN ISLAND, The Bronx, Anchorage Borough",borough
+BoroughName,"Fairbanks North Star Borough, Juneau Borough, Kenai Peninsula Borough",borough
+municipality_district,"Matanuska-Susitna Borough, Gettysburg Borough, Ketchikan Gateway Borough",borough
+borough_name,"Staten Island, The Bronx, Anchorage",borough
+MunicipalityBorough,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau Borough",borough
+Borough_Designation,"Matanuska-Susitna Borough, Ketchikan Gateway Borough, Haines Borough",borough
+is_active_flag,"True, False, True",non_spatial
+record_verified,"False, False, True",non_spatial
+quality_check_passed,"1, 0, 1",non_spatial
+binary_response_code,"Y, N, Y",non_spatial
+eligibility_status,"Eligible, Ineligible, Eligible",non_spatial
+consent_obtained,"Yes, No, Yes",non_spatial
+has_prior_history,"true, false, false",non_spatial
+requires_followup,"0, 1, 0",non_spatial
+data_completeness_flag,"Complete, Incomplete, Complete",non_spatial
+boolean_encoded_level,"T, F, T",non_spatial
+participation_indicator,"P, NP, P",non_spatial
+visit_status,"Open, Closed, Open",non_spatial
+review_required,"YES, NO, NO",non_spatial
+is_expedited_case,"True, True, False",non_spatial
+consistency_flag,"OK, FAIL, OK",non_spatial
+reporting_year,"2022, 2023, 2024",non_spatial
+financial_year,"FY2021, FY2022, FY2023",non_spatial
+budget_period,"2022-2023, 2023-2024, 2024-2025",non_spatial
+is_grant_awarded,"1, 0, 1",non_spatial
+grant_status,"Approved, Rejected, Pending",non_spatial
+grant_approved_flag,"Yes, No, Yes",non_spatial
+fiscal_week_of_entry,"15, 53, 62",non_spatial
+reporting_week_id,"5, 31, 70",non_spatial
+study_week_number,"1, 45, 88",non_spatial
+resident_positive_count,"22, 75, 49",non_spatial
+cases_among_residents,"8, 103, 91",non_spatial
+num_resident_infections,"15, 44, 112",non_spatial
+resident_fatalities,"4, 3, 5",non_spatial
+deceased_resident_count,"7, 6, 4",non_spatial
+mortality_count,"9, 11, 8",non_spatial
+docket_num,"0003158821, 0002994017, 0003045698",non_spatial
+case_id_ref,"0004582109, 0004112358, 0003987654",non_spatial
+record_tracking_nbr,"0001889234, 0002543987, 0002765111",non_spatial
+ucc_filing_id,"0004519872, 0003098765, 0006123456",non_spatial
+document_control_num,"0008765432, 0001112233, 0009988776",non_spatial
+filing_reference_id,"0002581470, 0003692581, 0007418529",non_spatial
+recreational_sales_usd,"1624501.75, 1499823.10, 1588112.99",non_spatial
+taxable_revenue,"987543.21, 1123456.78, 1050600.50",non_spatial
+total_product_volume,"2105432.5, 1987345.2, 2050111.75",non_spatial
+healthcare_costs,"1543289.50, 3105677.12, 987543.21",non_spatial
+claim_amount,"2150998.75, 1987450.00, 450123.99",non_spatial
+insurance_payout,"1654321.80, 2400500.25, 3012876.55",non_spatial
+is_processed,"True, False, True",non_spatial
+review_status,"Approved, Pending, Rejected",non_spatial
+item_count,"4, 12, 8",non_spatial
+count_age_35_44,"1, 4, 8",non_spatial
+RespondentsAged35to44,"3, 7, 12",non_spatial
+age_group_35_44_n,"6, 1, 9",non_spatial
+_25_34,"5, 1, 16",non_spatial
+_55_64,"2, 9, 21",non_spatial
+_65_plus,"4, 12, 7",non_spatial
+age_55_64_count,"5, 1, 10",non_spatial
+population_55_to_64,"9, 0, 6",non_spatial
+num_persons_55_64,"3, 12, 8",non_spatial
+has_prek,"Yes, No, Yes",non_spatial
+student_count,"28, 150, 320",non_spatial
+program_type,"General Education, After School, STEM Focus",non_spatial
+is_approved,"True, False, True",non_spatial
+priority_level,"High, Medium, Low",non_spatial
+compliance_status,"Compliant, Non-Compliant, Under Review",non_spatial
+ethnicity_id,"3, 5, 10",non_spatial
+demographic_race_key,"4, 6, 12",non_spatial
+race_identifier,"7, 8, 15",non_spatial
+account_net_worth,"1520391.55, -847200.10, 4201888.0",non_spatial
+portfolio_value,"7892345.67, 210987.33, -123456.78",non_spatial
+current_assets,"9980450.0, -250000.0, 6051234.99",non_spatial
+total_sales_amount,"8502145, 6912345, 10250000",non_spatial
+income_generated,"5432109.87, 12345678.90, 8877665.50",non_spatial
+gross_receipts,"9100500, 7854321, 6549870",non_spatial
+pop_density_level,"3, 4, 5",non_spatial
+population_group,"10, 11, 12",non_spatial
+demographic_cluster_id,"1, 3, 5",non_spatial
+state_fips_code,"06, 48, 12",non_spatial
+geo_id,"53, 08, 36",non_spatial
+location_code,"17, 39, 04",non_spatial
+borough_id,"3, 4, 5",borough_code
+b_code,"170, 122, 90",borough_code
+boro_identifier,"20, 110, 130",borough_code
+boro_id,"3, 4, 5",borough_code
+borough_num_code,"110, 020, 170",borough_code
+borough_abbreviation,"BRX, QNS, SI",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_id,"5, 3, 4",borough_code
+b_code,"4, 5, 3",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_code,"5, 3, 4",borough_code
+borough_num,"4, 5, 3",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_num,"5, 1, 3",borough_code
+nyc_boro_code,"4, 2, 1",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_id,"3, 4, 5",borough_code
+borough_num,"3, 4, 5",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_id,"11, 102, 16",borough_code
+borough_num,"220, 31, 8",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_id,"3, QN, BX",borough_code
+borough_identifier,"MN, BK, SI",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_num,"5, 4, 3",borough_code
+borough_identifier,"4, 3, 5",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_id,"5, 1, 4",borough_code
+b_code,"2, 3, 1",borough_code
+boro_id,"3, 4, 5",borough_code
+borough_identifier,"110, 130, 180",borough_code
+borough_num_code,"MN, BX, SI",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_code_alpha,"BK, MN, QN",borough_code
+borough_abbreviation,"BX, SI, M",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_num,"101, 202, 303",borough_code
+borough_identifier,"MN, BK, QN",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_num,"122, 130, 164",borough_code
+b_code,"20, 60, 90",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_code,"110, 122, 130",borough_code
+borough_identifier,"MN, BX, SI",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_code_num,"101, 102, 103",borough_code
+b_code,"11, 21, 31",borough_code
+borough_id,"5, 020, 150",borough_code
+boro_code,"4, 050, 275",borough_code
+boro_num,"3, 110, 180",borough_code
+boro_id,"3, 4, 5",borough_code
+borough_identifier,"5, 3, 4",borough_code
+boro_num,"4, 5, 3",borough_code
+borough_id,"3, 4, 5",borough_code
+b_code,"BK, QN, SI",borough_code
+boro_num,"122, 130, 170",borough_code
+borough_id,"3, 4, 5",borough_code
+b_code,"5, 3, 4",borough_code
+boro_code,"4, 3, 5",borough_code
+BoroughName,"Manhattan, The Bronx, Fairbanks North Star Borough",borough
+borough_division,"Kenai Peninsula Borough, Juneau Borough, Kodiak Island Borough",borough
+MUNICIPAL_BOROUGH,"Anchorage Borough, Denali Borough, Bristol Bay Borough",borough
+MUNICIPAL_BOROUGH,"STATEN ISLAND, THE BRONX, JUNEAU BOROUGH",borough
+BOROUGH_NAME,"Anchorage, Fairbanks North Star, Kenai Peninsula",borough
+CITY_BOROUGH,"MATANUSKA-SUSITNA, KETCHIKAN GATEWAY, NORTH SLOPE",borough
+BoroName,"The Bronx, Staten Island, Matanuska-Susitna Borough",borough
+municipality_borough,"Fairbanks North Star Borough, Kenai Peninsula Borough, West Chester",borough
+AdminBorough,"Anchorage, Juneau, Doylestown",borough
+Borough_Name,"Brooklyn, The Bronx, Staten Island",borough
+Municipality_Borough,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau Borough",borough
+borough_division,"West Chester Borough, Doylestown Borough, Matanuska-Susitna Borough",borough
+boro_name,"The Bronx, Manhattan, Queens",borough
+MunicipalBorough,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau City and Borough",borough
+Borough_Designation,"Staten Island, Brooklyn, Anchorage Borough",borough
+CommunityBorough,"Staten Island, The Bronx, Juneau Borough",borough
+borough_name,"Fairbanks North Star Borough, Kenai Peninsula Borough, Matanuska-Susitna Borough",borough
+AdminBorough,"West Chester, Doylestown, ANCHORAGE",borough
+boro,"STATEN ISLAND, The Bronx, Matanuska-Susitna Borough",borough
+administrative_district,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau",borough
+BoroughName,"Denali Borough, Ketchikan Gateway Borough, Sitka",borough
+BoroName,"The Bronx, Staten Island, Fairbanks North Star Borough",borough
+admin_borough,"Kenai Peninsula Borough, Juneau Borough, North Slope Borough",borough
+BOROUGH_JURISDICTION,"Denali Borough, Haines Borough, Ketchikan Gateway Borough",borough
+borough_name,"Staten Island, The Bronx, Fairbanks North Star Borough",borough
+MunicipalityBorough,"Kenai Peninsula Borough, Anchorage Borough, Matanuska-Susitna Borough",borough
+Admin_District,"Juneau City and Borough, West Chester, Doylestown",borough
+Borough_Name,"The Bronx, Staten Island, Matanuska-Susitna Borough",borough
+BORO_NAME,"ANCHORAGE, JUNEAU, SITKA",borough
+Jurisdiction,"State College, Kenai Peninsula Borough, West Chester",borough
+borough_name,"Brooklyn, Staten Island, Fairbanks North Star Borough",borough
+MUNICIPAL_BOROUGH,"Kenai Peninsula Borough, ANCHORAGE BOROUGH, Juneau Borough",borough
+Borough,"Matanuska-Susitna Borough, Ketchikan Gateway Borough, Sitka Borough",borough
+Borough_Name,"Staten Island, The Bronx, Kenai Peninsula Borough",borough
+BOROUGH,"STATEN ISLAND, ALEUTIANS EAST BOROUGH, LAKE AND PENINSULA BOROUGH",borough
+jurisdiction_borough,"The Bronx, North Slope Borough, Denali Borough",borough
+boro,"Brooklyn, Staten Island, Anchorage Borough",borough
+Borough_Name,"Fairbanks North Star Borough, Kenai Peninsula Borough, Matanuska-Susitna Borough",borough
+BOROUGH_DISTRICT,"GETTYSBURG, DOYLESTOWN, JUNEAU",borough
+BoroughName,"Staten Island, The Bronx, Fairbanks North Star Borough",borough
+municipal_borough,"State College, Metuchen, Doylestown",borough
+JurisdictionBorough,"Kenai Peninsula Borough, Juneau, Ketchikan Gateway Borough",borough
+borough_name,"Brooklyn, Staten Island, Fairbanks North Star Borough",borough
+Borough,"Kenai Peninsula Borough, Juneau, Ketchikan Gateway Borough",borough
+municipality_borough,"North Slope Borough, ANCHORAGE, Haines Borough",borough
+borough_name,"Brooklyn, Staten Island, Anchorage Borough",borough
+location_borough,"Fairbanks North Star Borough, Matanuska-Susitna Borough, Juneau Borough",borough
+site_borough,"Kenai Peninsula Borough, Ketchikan Gateway Borough, NORTH SLOPE BOROUGH",borough
+Borough_Name,"Staten Island, The Bronx, Fairbanks North Star Borough",borough
+Admin_Borough,"Juneau Borough, Matanuska-Susitna Borough, Kenai Peninsula Borough",borough
+City_Borough,"Anchorage Borough, Sitka Borough, Haines Borough",borough
+boro,"STATEN ISLAND, The Bronx, Anchorage Borough",borough
+borough_name,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau Borough",borough
+JurisdictionBorough,"Matanuska-Susitna Borough, Bristol Bay Borough, Kodiak Island Borough",borough
+boro_name,"STATEN ISLAND, The Bronx, Anchorage Borough",borough
+BoroughName,"Fairbanks North Star Borough, Juneau Borough, Kenai Peninsula Borough",borough
+municipality_district,"Matanuska-Susitna Borough, Gettysburg Borough, Ketchikan Gateway Borough",borough
+borough_name,"Staten Island, The Bronx, Anchorage",borough
+MunicipalityBorough,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau Borough",borough
+Borough_Designation,"Matanuska-Susitna Borough, Ketchikan Gateway Borough, Haines Borough",borough
+reporting_year,"2022, 2023, 2024",non_spatial
+budget_period,"FY22, FY23, FY24",non_spatial
+accounting_cycle,"2021-2022, 2022-2023, 2023-2024",non_spatial
+is_funded,"Yes, No, Yes",non_spatial
+award_status,"Approved, Pending Review, Rejected",non_spatial
+funding_approved,"1, 0, 1",non_spatial
+patient_visit_count,"5, 1, 12",non_spatial
+procedure_sequence_id,"101, 4, 25",non_spatial
+days_since_last_contact,"7, 90, 365",non_spatial
+resident_positive_count,"42, 75, 29",non_spatial
+in_house_infections,"15, 88, 51",non_spatial
+cumulative_patient_cases,"102, 94, 67",non_spatial
+patient_fatalities,"4, 3, 5",non_spatial
+number_of_deceased,"6, 0, 7",non_spatial
+mortality_count,"10, 8, 4",non_spatial
+lien_file_id,"0003154821, 0002998745, 0003012345",non_spatial
+document_ref_num,"0005432198, 0005678901, 0004987654",non_spatial
+filing_identifier,"0001876543, 0001999888, 0002109876",non_spatial
+ucc_document_number,"0004198335, 0001992740, 0006015529",non_spatial
+corp_filing_id,"0018472950, 0035510982, 0009871234",non_spatial
+case_file_num,"0007823451, 0001009876, 0004560011",non_spatial
+total_recreational_sales,"1621450.75, 1789321.10, 1599876.55",non_spatial
+gross_receipts,"2054321.99, 1987654.32, 2100543.80",non_spatial
+taxable_revenue,"1350100.25, 1402305.60, 1388991.05",non_spatial
+healthcare_cost,"985432.10, 1543890.55, 3102945.78",non_spatial
+claim_amount,"850212.99, 1998341.20, 2401765.05",non_spatial
+total_expenditure,"1123456.78, 2050600.43, 4500123.90",non_spatial
+IsActive,"True, False, TRUE",non_spatial
+ComplianceStatus,"Compliant, Non-Compliant, Pending Review",non_spatial
+ViolationCount,"2, 5, 12",non_spatial
+count_age_45_54,"1, 4, 8",non_spatial
+num_dependents,"1, 3, 4",non_spatial
+years_of_service,"1, 7, 15",non_spatial
+_25_34,"5, 2, 18",non_spatial
+_65_plus,"9, 1, 14",non_spatial
+age_group_55_64,"7, 22, 4",non_spatial
+Age_55_to_64_Count,"5, 1, 9",non_spatial
+Pop_55_64,"11, 0, 6",non_spatial
+persons_age_55_64,"3, 8, 15",non_spatial
+is_in_kindergarten,"Yes, No, Yes",non_spatial
+kindergarten_age_child,"TRUE, FALSE, FALSE",non_spatial
+kindergarten_enrollment,"Enrolled, Not Enrolled, Enrolled",non_spatial
+certification_status,"Certified, Pending, Rejected",non_spatial
+quality_score,"88, 95, 72",non_spatial
+compliance_level,"Level A, Level C, Level B",non_spatial
+ethnicity_id,"3, 5, 10",non_spatial
+demographic_group_num,"4, 7, 15",non_spatial
+race_code_census,"6, 9, 13",non_spatial
+account_ending_balance,"458201.75, -2198450.22, 15730.90",non_spatial
+net_asset_value,"7891234.56, -1250.00, 950432.10",non_spatial
+portfolio_current_worth,"10543881.05, -850200.40, 25.50",non_spatial
+total_sales,"8540201, 5991345, 10150677",non_spatial
+gross_income,"6892143.50, 9215004.25, 7500112.99",non_spatial
+generated_earnings,"11245890, 6754321, 8899012",non_spatial
+household_size_category,"1, 4, 5",non_spatial
+income_bracket_id,"101, 201, 301",non_spatial
+risk_assessment_group,"Low, Moderate, High",non_spatial
+record_id,"ID-7890, ID-1234, ID-5678",non_spatial
+case_status,"Approved, Denied, In Review",non_spatial
+item_count,"15, 8, 122",non_spatial
+borough_id,"3, 4, 5",borough_code
+boro_code,"MN, BK, BX",borough_code
+borough_num,"101, 202, 303",borough_code
+borough_id,"3, 4, 5",borough_code
+b_code,"BX, QN, SI",borough_code
+borough_identifier,"101, 201, 301",borough_code
+boro_id,"3, 4, 5",borough_code
+borough_num,"BX, QN, SI",borough_code
+b_code,"020, 110, 170",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_identifier,"20, 90, 122",borough_code
+boro_id,"110, 170, 220",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_id,"5, 3, 4",borough_code
+boro_num,"4, 5, 3",borough_code
+borough_identifier,"3, 5, 4",borough_code
+boroCode,"4, 3, 5",borough_code
+nyc_borough_num,"5, 4, 3",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_identifier,"4, 5, 3",borough_code
+b_code,"5, 3, 4",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_identifier,"QN, BK, SI",borough_code
+borough_code_alpha,"MN, BX, BK",borough_code
+boro_code,"3, 4, 5",borough_code
+borough_identifier,"5, 3, 4",borough_code
+b_code,"4, 5, 3",borough_code
+boro_id,"3, 4, 5",borough_code
+borough_identifier,"BX, QN, SI",borough_code
+borough_num,"301, 401, 501",borough_code
+borough_num,"3, 4, 5",borough_code
+boro_id,"MN, QN, BX",borough_code
+borough_code_val,"110, 020, 170",borough_code
+borough_identifier,"3, 4, 5",borough_code
+boro_id,"4, 5, 3",borough_code
+b_code,"5, 3, 4",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_identifier,"BX, QN, SI",borough_code
+b_code,"5, 3, 4",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_code,"5, 3, 4",borough_code
+borough_num,"4, 5, 3",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_code,"4, 5, 3",borough_code
+BoroughNum,"5, 3, 4",borough_code
+borough_identifier,"3, 4, 5",borough_code
+boro_numeric_code,"5, 3, 4",borough_code
+b_code,"4, 5, 3",borough_code
+boro_id,"3, 4, 5",borough_code
+borough_identifier,"5, 3, 4",borough_code
+boro_num,"4, 5, 3",borough_code
+borough_id,"3, 4, 5",borough_code
+boro_code,"MN, BK, QN",borough_code
+borough_num,"020, 110, 090",borough_code
+borough_identifier,"3, 4, 5",borough_code
+boro_code_num,"5, 3, 4",borough_code
+b_code,"4, 5, 3",borough_code
+boro_id,"3, 4, 5",borough_code
+borough_number,"101, 205, 310",borough_code
+borough_identifier,"BX, MN, BK",borough_code
+borough_name,"The Bronx, Manhattan, Fairbanks North Star Borough",borough
+Borough,"Anchorage Borough, Kenai Peninsula Borough, Matanuska-Susitna Borough",borough
+BOROUGH_NAME,"Juneau Borough, Ketchikan Gateway Borough, Bristol Bay Borough",borough
+BoroughName,"Staten Island, The Bronx, Fairbanks North Star Borough",borough
+boro_assignment,"Juneau Borough, Kenai Peninsula Borough, Matanuska-Susitna Borough",borough
+MUNICIPAL_BOROUGH,"Aleutians East Borough, Ketchikan Gateway Borough, Kodiak Island Borough",borough
+ADMINISTRATIVE_BOROUGH,"Staten Island, The Bronx, Fairbanks North Star Borough",borough
+MUNICIPAL_DISTRICT,"Anchorage Borough, Matanuska-Susitna Borough, Kenai Peninsula Borough",borough
+BOROUGH_NAME,"Doylestown, Gettysburg, Juneau Borough",borough
+boro_name,"Brooklyn, The Bronx, Staten Island",borough
+ADMIN_BOROUGH,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau City and Borough",borough
+BoroughName,"Ketchikan Gateway Borough, Matanuska-Susitna Borough, Denali Borough",borough
+Borough Name,"Brooklyn, The Bronx, Queens",borough
+Municipal_Borough,"Staten Island, Fairbanks North Star Borough, Kenai Peninsula Borough",borough
+Administrative_District,"Manhattan, Anchorage, Matanuska-Susitna Borough",borough
+Boro,"The Bronx, Staten Island, Anchorage Borough",borough
+borough_district,"Fairbanks North Star Borough, Juneau Borough, Kenai Peninsula Borough",borough
+Admin_Borough,"Matanuska-Susitna Borough, State College, Haines Borough",borough
+boro_name,"Staten Island, The Bronx, Anchorage Borough",borough
+municipality_borough,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau City and Borough",borough
+AdminBorough,"MATANUSKA-SUSITNA BOROUGH, Bristol Bay Borough, Haines Borough",borough
+BoroughName,"Staten Island, The Bronx, Anchorage Borough",borough
+AdministrativeBorough,"Fairbanks North Star Borough, Kenai Peninsula Borough, Juneau Borough",borough
+MunicipalityBorough,"Matanuska-Susitna Borough, Kodiak Island Borough, Haines Borough",borough
+BoroName,"STATEN ISLAND, The Bronx, Fairbanks North Star Borough",borough
+BOROUGH_NAME,"Anchorage, Matanuska-Susitna Borough, Kodiak Island Borough",borough
+JurisdictionBorough,"Denali Borough, Haines Borough, Yakutat City and Borough",borough
+Borough_Name,"Staten Island, The Bronx, Fairbanks North Star Borough",borough
+BORO,"JUNEAU, KENAI PENINSULA, KETCHIKAN GATEWAY",borough
+AdministrativeBorough,"Matanuska-Susitna Borough, State College, Haddonfield",borough
+borough_name,"Brooklyn, Staten Island, Fairbanks North Star Borough",borough
+Borough,"State College, Kenai Peninsula Borough, Juneau",borough
+BORO_NM,"ANCHORAGE, Matanuska-Susitna Borough, Sitka",borough
+boro_name,"The Bronx, Staten Island, Fairbanks North Star Borough",borough
+CommunityDistrict,"Kenai Peninsula Borough, Juneau Borough, Matanuska-Susitna Borough",borough
+NYC_BORO,"Ketchikan Gateway Borough, Kodiak Island Borough, Anchorage Borough",borough
+BoroughName,"Brooklyn, Staten Island, Anchorage Borough",borough
+MUNICIPAL_BOROUGH,"FAIRBANKS NORTH STAR BOROUGH, KENAI PENINSULA BOROUGH, MATANUSKA-SUSITNA BOROUGH",borough
+AdminBorough,"West Chester, Doylestown, Haddonfield",borough
+Boro,"The Bronx, Staten Island, Fairbanks North Star Borough",borough
+BOROUGH,"ANCHORAGE, JUNEAU, SITKA",borough
+Borough_Name,"Matanuska-Susitna Borough, Kenai Peninsula Borough, Bristol Bay Borough",borough
+borough,"Brooklyn, Staten Island, Fairbanks North Star Borough",borough
+borough_name,"Kenai Peninsula Borough, Juneau Borough, Doylestown",borough
+admin_borough,"Matanuska-Susitna Borough, KETCHIKAN GATEWAY BOROUGH, Fort Lee",borough
+borough_name,"Brooklyn, Staten Island, Fairbanks North Star Borough",borough
+municipality_borough,"Anchorage Borough, Kenai Peninsula Borough, Juneau Borough",borough
+location_boro,"Matanuska-Susitna Borough, Ketchikan Gateway Borough, North Slope Borough",borough
+Borough_Name,"STATEN ISLAND, The Bronx, Fairbanks North Star Borough",borough
+Admin_Borough,"Kenai Peninsula Borough, Juneau Borough, Anchorage",borough
+CityBorough,"Matanuska-Susitna Borough, Kodiak Island Borough, Bristol Bay Borough",borough
+boro_name,"Staten Island, The Bronx, Anchorage Borough",borough
+BOROUGH_DESC,"FAIRBANKS NORTH STAR BOROUGH, KENAI PENINSULA BOROUGH, JUNEAU BOROUGH",borough
+CommunityBorough,"Matanuska-Susitna Borough, Denali Borough, Kodiak Island Borough",borough
+BoroughName,"STATEN ISLAND, The Bronx, Fairbanks North Star Borough",borough
+Administrative_Borough,"Kenai Peninsula Borough, Juneau Borough, Anchorage Borough",borough
+borough_desc,"Matanuska-Susitna Borough, Bristol Bay Borough, Haines Borough",borough
+boro_name,"Staten Island, THE BRONX, Fairbanks North Star Borough",borough
+CityBorough,"Kenai Peninsula Borough, Anchorage Borough, Juneau Borough",borough
+BOROUGH_DESC,"MATANUSKA-SUSITNA BOROUGH, Ketchikan Gateway Borough, Bristol Bay Borough",borough
+is_active_flag,"True, False, True",non_spatial
+record_verified,"False, False, True",non_spatial
+quality_check_passed,"1, 0, 1",non_spatial
+binary_response_code,"Y, N, Y",non_spatial
+eligibility_status,"Eligible, Ineligible, Eligible",non_spatial
+consent_obtained,"Yes, No, Yes",non_spatial
+has_prior_history,"true, false, false",non_spatial
+requires_followup,"0, 1, 0",non_spatial
+data_completeness_flag,"Complete, Incomplete, Complete",non_spatial
+boolean_encoded_level,"T, F, T",non_spatial
+participation_indicator,"P, NP, P",non_spatial
+visit_status,"Open, Closed, Open",non_spatial
+review_required,"YES, NO, NO",non_spatial
+is_expedited_case,"True, True, False",non_spatial
+consistency_flag,"OK, FAIL, OK",non_spatial
+postal_code,"94105, 90012, 92101",zip5
+zip,"10011, 10023, 10004",zip5
+zip_code_5,"77002, 75201, 78704",zip5
+postal_code,"94102, 90210, 92101",zip5
+zip5_code,"60601, 60614, 60657",zip5
+Zip,"10001, 10012, 10023",zip5
+PostalCode,"94110, 90210, 92101",zip5
+Zip_5,"10011, 10012, 10013",zip5
+MailingZip,"33133, 33139, 33140",zip5
+PostalCode,"90210, 94117, 92101",zip5
+Zip,"10011, 14202, 12203",zip5
+LocationZip,"75201, 77002, 78704",zip5
+LocationZip,"90210, 94105, 95123",zip5
+PostalCode,"75201, 78701, 77002",zip5
+Zip_Code,"02108, 01103, 01608",zip5
+PostalCode,"94110, 90210, 92101",zip5
+Zip5,"33131, 33139, 33109",zip5
+MailingZip,"60601, 60611, 60614",zip5
+postal_code,"90210, 94105, 92101",zip5
+ZipCode,"10019, 11211, 14202",zip5
+zip,"33131, 33602, 32801",zip5
+zip,"94102, 90012, 92109",zip5
+postal_code,"77002, 75201, 78701",zip5
+zip_code_5,"10011, 12207, 14202",zip5
+postal_code,"90210, 94117, 92109",zip5
+zip,"75201, 77002, 78701",zip5
+mail_zip,"02108, 01103, 01608",zip5
+incident_zip_code,"90210, 94105, 92101",zip5
+LocationZip,"33131, 33602, 32801",zip5
+ZipcodeOfOccurrence,"60601, 60614, 60657",zip5
+POSTAL_CODE,"94105, 90012, 92614",zip5
+ZIP5,"60606, 60611, 60654",zip5
+LOCATION_ZIP,"33131, 33139, 33178",zip5
+postal_code,"94102, 90210, 95113",zip5
+Zip5,"10001, 10019, 10036",zip5
+LOCATION_ZIP,"60601, 60611, 60614",zip5
+PostalCode,"90210, 94117, 95814",zip5
+Zip_Code_5_Digit,"10001, 10012, 10025",zip5
+zip,"60601, 60614, 60657",zip5
+postal_code,"90210, 94105, 92101",zip5
+zipcode_5digit,"33131, 33602, 32801",zip5
+mailing_zip,"10007, 11201, 10451",zip5
+PostalCode,"90210, 94110, 92101",zip5
+Event_ZIP,"75201, 77002, 78701",zip5
+LocationZip,"02109, 02114, 02116",zip5
+PostalCode,"90210, 94105, 92101",zip5
+mailing_zip,"02108, 01103, 02134",zip5
+location_zip5,"33133, 33139, 33109",zip5
+postal_code,"94102, 90210, 92101",zip5
+zip_code_5,"10001, 10011, 11201",zip5
+zip,"60601, 60614, 60657",zip5
+postal_code,"94110, 94117, 94105",zip5
+Zip5,"75201, 75202, 75204",zip5
+zip,"06103, 06105, 06106",zip5
+postal_code,"90210, 94105, 92101",zip5
+zip,"75201, 77002, 78701",zip5
+zip5_code,"02110, 01103, 01608",zip5
+LocationZipCode,"94102, 90210, 95814",zip5
+PostalCode_Event,"10001, 10011, 10023",zip5
+Event_Zip_5_Digit,"60601, 60614, 60657",zip5
+postal_code,"94102, 90210, 95814",zip5
+five_digit_zip,"75201, 77002, 78701",zip5
+zip5_code,"06103, 06510, 06901",zip5
+postal_code,"94105, 90012, 92101",zip5
+zip,"60606, 60614, 60654",zip5
+Zip5Code,"33131, 33132, 33130",zip5
+postal_code,"94102, 90210, 95112",zip5
+zip_code,"33139, 33602, 32801",zip5
+Zipcode5,"60605, 60611, 60654",zip5
+postal_code,"90210, 94105, 92101",zip5
+zip5_code,"60601, 60614, 60657",zip5
+location_zip,"33109, 33139, 33140",zip5
+zip_code,"90210, 94110, 92101",zip5
+location_zip,"75201, 77002, 78701",zip5
+postal_code,"02108, 01103, 01608",zip5
+postal_code,"90210, 94103, 92101",zip5
+zip5_code,"75201, 77002, 78701",zip5
+location_zip,"02108, 01103, 01608",zip5
+POSTAL_CODE,"94102, 90210, 95814",zip5
+ZIPCODE,"60601, 60614, 62701",zip5
+MAILING_ZIP,"33109, 33139, 30303",zip5
+PostalCode,"90210, 94103, 92101",zip5
+zip_code,"60601, 60614, 60657",zip5
+Zipcode,"33109, 33139, 33140",zip5
+postal_code,"90210, 94108, 92101",zip5
+Zip,"10001, 11201, 14202",zip5
+zip_5,"33131, 33602, 32801",zip5
+Location Zip Code,"94102, 94109, 94118",zip5
+Postal Code,"33130, 33131, 33139",zip5
+Event Zip,"10011, 10012, 10013",zip5
+postal_code,"94110, 94105, 94118",zip5
+zip5_code,"10011, 10012, 10013",zip5
+LocationZip,"77002, 77005, 77006",zip5
+postal_code,"90210, 94110, 95112",zip5
+zip_code_5,"75201, 77002, 78701",zip5
+address_zip,"02108, 02116, 02215",zip5
+postal_code,"94105, 94108, 94122",zip5
+location_zip,"33130, 33139, 33155",zip5
+zip5_code,"60601, 60614, 60657",zip5
+Postal_Code,"90210, 94105, 92101",zip5
+Zip5,"10001, 14202, 12207",zip5
+postal,"75201, 77002, 78701",zip5
+location_zipcode,"90210, 94117, 92614",zip5
+event_postal_code,"75201, 77002, 78701",zip5
+report_zip_code,"33131, 33602, 32801",zip5
+postal_code,"90210, 94105, 92618",zip5
+Zip5,"10011, 11201, 14623",zip5
+zip,"75201, 77005, 78704",zip5
+PostalCode,"33139, 32801, 34236",zip5
+zip,"60614, 60657, 60601",zip5
+Mailing_Zip,"98101, 98109, 98122",zip5
+PostalCode,"94110, 94117, 94103",zip5
+Zip_Code,"33131, 33139, 33109",zip5
+Zip5,"10001, 10011, 10019",zip5
+zip,"94110, 90210, 92101",zip5
+postal_code,"33131, 33602, 32801",zip5
+zip_5,"60601, 60614, 60657",zip5
+zip_code,"90210, 94103, 92101",zip5
+location_zipcode,"75201, 77002, 78701",zip5
+postal_code,"33131, 32801, 33602",zip5
+zip9_code,"94110-1234, 94107-5678, 94114-9012",zip9
+postal_code_full,"10001-2410, 10011-3111, 10023-4825",zip9
+mailing_zip,"33130-1199, 33131-2005, 33132-3515",zip9
+zip_code_full,"90210-1234, 90210-5678, 90210-0015",zip9
+postal_code_plus4,"10001-2501, 10002-8843, 10003-1122",zip9
+zip9,"75201-3456, 75201-7890, 75201-1111",zip9
+ZipCodePlus4,"90210-1706, 94105-5401, 92101-5917",zip9
+full_zip_code,"77002-1001, 77002-2345, 77002-8899",zip9
+postal_code_9,"33139-2514, 32819-8111, 33602-5147",zip9
+postal_code_full,"90210-1702, 90211-1401, 90212-2315",zip9
+zip_plus_4,"33139-1234, 33140-5678, 33141-9012",zip9
+extended_zip,"60611-1122, 60611-3344, 60611-5566",zip9
+postal_code_full,"90210-1702, 90211-2345, 90212-9876",zip9
+zip_code_plus4,"33139-1111, 33139-2222, 33139-3333",zip9
+location_zip9,"60606-1234, 60611-5678, 60654-9012",zip9
+zip_plus_4,"90210-1234, 94110-5678, 90012-9012",zip9
+FullZipCode,"75201-0010, 75201-1122, 75201-4589",zip9
+postal_code_9,"10001-2345, 11201-6789, 12207-1111",zip9
+zip_plus_4,"90210-1501, 94105-5512, 92101-3825",zip9
+full_zip_code,"95814-2919, 95814-3474, 95814-0155",zip9
+postal_code_ext,"93721-1234, 95113-5678, 92618-9012",zip9
+zip_code_full,"94110-3415, 90210-2411, 95126-1109",zip9
+PostalCodePlus4,"33139-2101, 33139-3522, 33139-4876",zip9
+zip_plus_4,"60611-1234, 60614-5678, 60657-9012",zip9
+zip_plus_4,"94105-3911, 94108-5402, 94122-2217",zip9
+FullZipCode,"10021-4806, 10021-8753, 10021-0119",zip9
+extended_postal_code,"60605-4501, 60614-2334, 60657-3412",zip9
+Postal Code Plus 4,"90210-2411, 90211-1702, 90212-3607",zip9
+Full Zip,"75201-3101, 75201-3122, 75201-5558",zip9
+Zip Plus Four,"10004-1234, 10005-5678, 10006-9012",zip9
+ZIP_PLUS4,"94110-3456, 90012-1298, 95814-2201",zip9
+postal_code_full,"77002-1001, 77002-4587, 77002-9103",zip9
+zipcode9,"10023-5544, 11201-3820, 12207-6543",zip9
+zip_code_plus4,"90210-1702, 94110-3456, 92101-7890",zip9
+Zip9,"10001-1234, 10001-5588, 10001-0005",zip9
+FullPostalCode,"75201-2345, 77002-6789, 78701-1111",zip9
+zip_plus_4,"94110-1234, 94105-5678, 94118-9012",zip9
+postal_code_full,"33131-0110, 33131-2550, 33131-8765",zip9
+full_zipcode,"60606-1111, 60611-2222, 60614-3333",zip9
+zip_code_plus_4,"10022-7201, 10022-1598, 10022-4311",zip9
+postal_code_extended,"33131-2902, 33132-1011, 33130-3001",zip9
+ZipPlus4,"98101-3701, 98101-2521, 98101-3412",zip9
+postal_code_full,"94102-1415, 94109-2653, 94118-3801",zip9
+zip_plus_4,"33130-1122, 33131-3344, 33132-5566",zip9
+zip9_code,"10001-0010, 10001-2035, 10001-8754",zip9
+zip_plus_4,"90210-1501, 94117-2511, 95126-3456",zip9
+postal_code_ext,"78701-1122, 78701-3450, 78701-9876",zip9
+zip_extended,"33139-2101, 32819-8601, 33602-5149",zip9
+postal_code_full,"90210-1234, 90210-5588, 90210-2715",zip9
+ZipPlus4,"60606-1111, 60611-2222, 60654-3333",zip9
+zip_extended,"33131-4501, 33139-6789, 33109-1122",zip9
+postal_code_full,"90210-1234, 94110-5678, 90012-9012",zip9
+zip_plus_4,"10001-0001, 10001-2550, 10001-8765",zip9
+full_zipcode,"75201-3456, 78701-7890, 77002-4321",zip9
+Zip_Plus_4,"94110-3456, 94110-1298, 94110-7701",zip9
+Zipcode9,"33109-5401, 33139-2115, 33140-8888",zip9
+Postal_Code_9_Digit,"60601-1111, 60605-2345, 60616-9876",zip9
+zip_code_plus4,"94110-3631, 90210-1501, 95126-2716",zip9
+PostalCode9,"33139-2114, 33139-3522, 33139-4809",zip9
+zip_full,"60601-1234, 60611-5678, 60654-9012",zip9
+zip_code_plus4,"90210-1234, 90210-5678, 90210-0110",zip9
+postalCode9,"60601-1122, 60614-3344, 60657-5566",zip9
+zipcode_extended,"33131-1000, 33139-2021, 33109-3033",zip9
+zip_plus_4,"10011-2009, 10011-3456, 10011-8710",zip9
+full_zip_code,"14202-1234, 14203-5678, 14204-9012",zip9
+zip9_code,"60606-1703, 60607-3808, 60661-2917",zip9
+postal_code_full,"90210-1501, 90210-2411, 90210-3318",zip9
+zip_plus_4,"10011-2345, 10012-6789, 10013-0123",zip9
+zipcode9,"33131-1050, 33139-3001, 33156-5421",zip9
+zip_code_plus_4,"10001-1234, 10011-5678, 10023-9012",zip9
+postal_code_full,"94110-3384, 94105-1905, 94103-4801",zip9
+ZipPlus4,"60601-1122, 60616-3456, 60654-7890",zip9
+zip_plus_4,"94110-3614, 94117-2511, 94105-1815",zip9
+full_zip_code,"60606-1234, 60606-5678, 60606-9012",zip9
+zipcode_9,"10001-2241, 10011-8754, 10013-0987",zip9
+ZIP9_Code,"94110-2358, 94103-1121, 94107-4567",zip9
+Postal_Code_Plus4,"75201-1122, 75201-3344, 75201-5566",zip9
+FullZip,"33130-1010, 33139-2501, 33140-1999",zip9
+zip_plus_4,"94110-3635, 94110-1845, 94110-5910",zip9
+postal_code_full,"33131-2902, 33139-3310, 33140-1703",zip9
+zip9_code,"60614-1234, 60614-5678, 60614-9012",zip9
+zip_plus_4,"94102-1550, 94103-4908, 94105-2907",zip9
+full_zip_code,"10011-5802, 10011-6789, 10011-1234",zip9
+postal_code_extended,"75201-3101, 75202-5405, 75204-2608",zip9
+zip_plus_4,"90210-1234, 90210-5678, 90210-9012",zip9
+postal_code_9,"33130-1122, 33131-3344, 33132-5566",zip9
+zip9_code,"60601-1000, 60601-2550, 60601-8341",zip9
+ZIP_PLUS4,"94107-3101, 90210-2411, 92614-4903",zip9
+postalCodeFull,"75201-1234, 75201-5678, 75201-9012",zip9
+zip_code_9,"10012-1090, 11211-6401, 10025-5610",zip9
+Zip_Plus_4,"94110-1234, 94110-5678, 94110-9012",zip9
+Extended_Zip,"33130-1122, 33131-3344, 33132-5566",zip9
+Full_Postal_Code,"60601-2345, 60611-6789, 60614-1011",zip9
+postal_code_full,"90210-1501, 90210-2411, 90210-3652",zip9
+zip_plus_4,"94102-4904, 90012-3203, 95113-1009",zip9
+zipcode9,"33139-2314, 33139-3501, 33139-1706",zip9
+postal_code_full,"90210-1501, 94105-3914, 95814-2919",zip9
+zip_code_plus4,"77002-1001, 75201-3101, 78701-4402",zip9
+mailing_zip_9,"10001-0005, 12210-0413, 14202-3114",zip9
+ZipPlus4,"90210-1234, 94110-5678, 92101-9012",zip9
+zip_code_full,"10001-0001, 10001-2501, 10001-8888",zip9
+PostalCode9,"75201-3456, 77002-7890, 78701-1122",zip9
+zip_plus_4,"94110-3456, 90210-1122, 95123-8765",zip9
+PostalCodePlus4,"77002-1234, 77002-5678, 77002-9012",zip9
+full_zip_code,"10001-1111, 10011-2222, 10012-3333",zip9
+postal_code_full,"94110-3456, 94107-1234, 94103-8765",zip9
+zip_plus_4,"60614-1111, 60614-2222, 60614-3333",zip9
+zip9_code,"33131-4501, 33139-2398, 33140-1928",zip9
+zip_plus_4,"94110-2384, 94105-1905, 94117-3312",zip9
+zip9_code,"60606-1234, 60611-5678, 60654-9012",zip9
+full_zip,"33131-2501, 33139-3305, 33140-1111",zip9
+ZIP Plus 4,"90210-1234, 94105-5678, 92101-9012",zip9
+Postal Code Plus 4,"10001-0010, 10001-2555, 10001-8765",zip9
+Full Zip Code,"33131-2803, 33139-1122, 33109-4598",zip9
+zip_code_full,"90210-1551, 90210-2411, 90210-3818",zip9
+zip_plus_4,"60605-1234, 60606-5678, 60607-9012",zip9
+postal_code_extended,"33139-1122, 33139-3344, 33139-5566",zip9
+Zip_Plus_4,"90210-1301, 90210-2568, 90210-3111",zip9
+Full_Zip_Code,"94110-2612, 94117-1124, 94103-4501",zip9
+Zipcode9,"75201-3456, 75201-7890, 75201-1122",zip9
+easting,"-8794321.55, -11543210, -9876543.2",x_coord
+map_x,"-13456789.01, -7654321, -10123456.7",x_coord
+x_projected,"-9234567.89, -12345678, -8345678.9",x_coord
+projected_easting,"-8345678.12, -11012345, -9753100.5",x_coord
+map_x_coordinate,"-13245678.9, -7890123.45, -10500000",x_coord
+x_coord_mercator,"-8899012.3, -12345678, -9988776.65",x_coord
+easting_coordinate,"-8453210.77, -11029384.2, -13498765",x_coord
+projected_x,"-9987123.45, -7543210.9, -12345678",x_coord
+map_x_coord,"-8912345.67, -10567890, -9321098.55",x_coord
+easting,"-9845123.5, -12543890, -8123456.78",x_coord
+map_x,"-10567321.1, -7987654, -13456789.01",x_coord
+x_coordinate,"-11109876.54, -9543210, -8765432.1",x_coord
+easting,"-8754321.55, -12345678, -10598765.4",x_coord
+x_projected,"-9988776.12, -11223344, -7654321.9",x_coord
+map_x,"-13579246.80, -8432109, -9021055.7",x_coord
+easting_m,"-9815432.11, -8245123.5, -11503298",x_coord
+map_x,"-10532145.8, -7890123.45, -13456789.0",x_coord
+x_projected,"-9321876.54, -12345678.9, -8877665.5",x_coord
+Easting Coordinate,"-8234567.89, -11543210, -9876543.21",x_coord
+Map X Value,"-7450123.5, -13001234.00, -10101010",x_coord
+Projected Easting,"-12345678.9, -8899001, -9512345.67",x_coord
+easting,"-8234567.89, -13210987.1, -9988776",x_coord
+map_x,"-7543210.55, -11029384.0, -8899001.2",x_coord
+x_coordinate,"-10543890.12, -9012345, -12345678.9",x_coord
+easting,"-8345912.11, -11259345.8, -9582103",x_coord
+map_x,"-10876543, -7654321.99, -13009876.5",x_coord
+x_projected,"-9753109.2, -8642098.76, -12121212",x_coord
+easting,"-8235471.55, -10987342.1, -9845123",x_coord
+x_projected_coord,"-11245789.01, -7890123.45, -8567321.9",x_coord
+map_x_value,"-13456789, -9012345.67, -8123456.78",x_coord
+easting,"-8349572.11, -11987453.6, -9876543",x_coord
+projected_x,"-13542987.55, -7453219, -10101010.1",x_coord
+map_easting_x,"-9954201.78, -12345678.90, -8642097.53",x_coord
+easting_coord,"-9845321.12, -11234567, -8765432.1",x_coord
+map_x,"-13456789.01, -7654321.9, -10101010",x_coord
+x_coordinate,"-8349201.55, -12500000, -9988776.6",x_coord
+easting,"-8345912.11, -10983456.7, -9512357",x_coord
+x_projected,"-12345678.90, -7654321.01, -8899001.2",x_coord
+map_easting,"-9988776.54, -11223344.55, -8765432.1",x_coord
+easting_coord,"-11054321.89, -8543210, -13210987.6",x_coord
+map_x,"-9876543.21, -7998877, -12345678.90",x_coord
+x_projected,"-10101010, -9250000.5, -14500123.45",x_coord
+Projected X,"-8234567.89, -13254321.1, -9988776",x_coord
+Easting Coordinate,"-7890123.45, -11223344.56, -10101010",x_coord
+Map X Value,"-9500123.7, -12500456.01, -8877665.5",x_coord
+easting,"-8574321.98, -10345678, -13123456.7",x_coord
+map_x,"-9988776.54, -11223344, -7654321.01",x_coord
+x_projected,"-8345912.4, -12456789.11, -9513579",x_coord
+map_x,"-8238450.12, -13163299.5, -9760521",x_coord
+easting,"-13625440.8, -8926105.33, -11688555",x_coord
+x_projected,"-10543210.55, -7890123.4, -12345678.9",x_coord
+Easting Coordinate,"-8543210.9, -12345678, -10987654.32",x_coord
+Map X,"-9876543.2, -11223344, -7500123.45",x_coord
+Projected X,"-14500123, -2345678.90, -9998887.7",x_coord
+easting_coord,"-9854321.55, -11234567, -8765432.10",x_coord
+map_x,"-12543210.9, -10987654.32, -7654321",x_coord
+x_projected,"-13579246.8, -8642097.53, -10010010.01",x_coord
+easting,"-9876543.21, -11012345, -8543210.9",x_coord
+map_x,"-12500000.00, -7450000.5, -10005432.11",x_coord
+x_coordinate,"-9998887, -13245678.90, -8877665.5",x_coord
+easting,"-9854321.12, -11029384, -8765432.1",x_coord
+map_x,"-12456789.01, -13210987.6, -9988776",x_coord
+x_projected,"-7890123.45, -10101010, -8345678.9",x_coord
+Easting,"-8432156.78, -10987654.3, -9753124",x_coord
+Projected X,"-7654321.99, -12345678.1, -11223344",x_coord
+Map X,"-9988776.54, -13579246, -8642097.5",x_coord
+easting,"-8234567.89, -11012345, -9876543.2",x_coord
+map_x,"-13542890.11, -7654321, -10005000.5",x_coord
+x_projected,"-9258147.36, -8888888.8, -12345678",x_coord
+easting_coord,"-8354291.55, -13498722.10, -10876543",x_coord
+map_x_proj,"-9912345.67, -7456789.01, -12345678.9",x_coord
+x_coordinate,"-11500345.8, -9245112.22, -8123456",x_coord
+map_x,"-8234567.89, -12109876.5, -10555432",x_coord
+easting,"-9876543.21, -11333222, -7543210.9",x_coord
+x_projected,"-1543219.55, -13456789.01, -8888888.88",x_coord
+Map Easting,"-8234567.12, -9753109.5, -13579246",x_coord
+Projected X,"-11122334.45, -8899001.0, -10101010.1",x_coord
+X Coordinate EPSG 3857,"-8333456.78, -12345678.9, -9988776",x_coord
+map_x,"-8234567.89, -11543210, -9876543.2",x_coord
+easting_coord,"-10555888.11, -7654321.5, -13219876",x_coord
+x_projected,"-9998877.65, -8877665, -12345678.9",x_coord
+easting,"-8239450.12, -11045987.5, -9753109",x_coord
+map_x,"-13579246.8, -7584930.22, -10123456",x_coord
+x_projection_coord,"-9876543.21, -12121212.1, -8005671",x_coord
+easting,"-8234567.12, -11098765.0, -9543210",x_coord
+map_x,"-13456789.9, -7654321.23, -10101010",x_coord
+X Projected Coord,"-9876543, -12345678.90, -8889990.5",x_coord
+easting,"-9786432.11, -10542987.5, -8345912",x_coord
+map_x,"-12459876, -11987654.32, -13001456.9",x_coord
+x_coordinate_projected,"-9543210.8, -7890123, -11223344.55",x_coord
+Easting,"-11034567.89, -8745123, -13521890.5",x_coord
+map_x,"-9812345.6, -7654321.01, -10005432",x_coord
+x_coord_proj,"-12345678.9, -8219430.77, -9988776",x_coord
+map_x,"-8345678.12, -13210987, -10012345.6",x_coord
+easting_value,"-11543210.99, -9876543.21, -7654321",x_coord
+projected_x,"-12345678.9, -8765432.10, -10987654",x_coord
+map_x,"-8354321.45, -10987654, -13456789.1",x_coord
+easting,"-9876543.21, -7543210.9, -11223344.55",x_coord
+x_projected,"-8899001.12, -12345678, -9999999.99",x_coord
+Easting Coordinate,"-8234567.89, -13209876.54, -10555123",x_coord
+Map X Value,"-9876543.21, -7450112.30, -11122334",x_coord
+Projected X,"-8901234.56, -12345678.9, -9998877",x_coord
+easting_coord,"-9812345.67, -11234567.89, -8765432.10",x_coord
+map_x,"-10543210, -7890123.45, -13456789.01",x_coord
+projected_x,"-9988776.5, -12345000.12, -8899001",x_coord
+easting,"-8234567.89, -12543210, -10010101.1",x_coord
+map_x,"-9876543.21, -7456123.4, -11223344.55",x_coord
+x_coordinate,"-13131313, -8585858.58, -9512357.9",x_coord
+easting,"-8234567.89, -11987654.3, -9988776",x_coord
+map_x,"-13543210.55, -7654321, -10123456.7",x_coord
+x_projected,"-9512345.67, -12345678, -8877665.5",x_coord
+easting,"-8234567.89, -11258901.1, -9876543",x_coord
+x_projected_coord,"-13456789.01, -7654321.23, -10101010.1",x_coord
+map_x,"-8500213.5, -12345678, -9998887.77",x_coord
+Map X,"-9824571.35, -11135802.9, -8459210",x_coord
+Easting,"-7458123.6, -13001549.22, -9218745",x_coord
+Projected Easting,"-10254367.01, -8991234.5, -12158963.74",x_coord
+easting,"-8349572.15, -13678901.5, -9982451",x_coord
+map_x,"-11123456.78, -7458123.9, -10876543.21",x_coord
+x_coordinate,"-12459876.33, -8899012.05, -7912345.6",x_coord
+y_coord_proj,"4853211.55, 2987105.1, 6123456",y_coord
+Northing,"3501298.7, 5554321.99, 4100800.01",y_coord
+map_y,"6890123.45, 2112233, 5205205.25",y_coord
+Northing Coordinate,"4512345.67, 3109876.5, 6001234",y_coord
+Map Y,"2890543.11, 5321098.0, 4789123",y_coord
+Projected Y,"3987654.32, 6543210.9, 2109876",y_coord
+northing,"4500123.45, 3129876, 6200500.1",y_coord
+y_projected,"2876543.21, 5554321.9, 4987654",y_coord
+y_epsg_3857,"3999888.7, 6789012.34, 2123456",y_coord
+y_coordinate,"4829103.55, 3150229.1, 6098345",y_coord
+northing,"2505199.82, 5732041.09, 4412367.5",y_coord
+map_y,"6951123.4, 2100587, 5543890.11",y_coord
+Northing Coordinate,"4865942.25, 2987115.0, 6543210",y_coord
+Projected Y,"3141592.6, 5201874.99, 4050607",y_coord
+map_y,"2718281.82, 6891011.12, 5555555.55",y_coord
+Northing,"4567890.12, 2134567, 6891234.5",y_coord
+y_projected,"3876543.21, 5551212.0, 6999876.54",y_coord
+Map_Y,"2987654, 4123456.78, 5050505.5",y_coord
+northing,"3456789.12, 5123456, 6890123.4",y_coord
+y_projected,"2109876.54, 4500123.0, 6999888",y_coord
+map_y,"2500000.7, 4876543.21, 6010203",y_coord
+northing,"4501234.56, 3890112, 6123456.7",y_coord
+map_y,"2987654.32, 5554321.0, 4123987",y_coord
+y_coordinate_projected,"3141592.65, 6875309.1, 2500000",y_coord
+Northing,"4567890.12, 5123456.7, 3987654",y_coord
+Projected Y,"6012345.55, 2876543.2, 4999888",y_coord
+y_map_coordinate,"3543210.9, 2109876.54, 6543210",y_coord
+y_northing,"4567890.12, 3123456, 6543210.5",y_coord
+ProjectedY,"2890123.45, 5555555.55, 4100200.0",y_coord
+mapNorthing,"6987123, 2005678.9, 3750000.75",y_coord
+y_proj_coord,"3894152.14, 4567890, 6123456.7",y_coord
+northing_m,"2500123.45, 5555555.55, 3141592",y_coord
+map_y,"4998765.3, 2109876.54, 6876543.21",y_coord
+northing,"4863157.33, 3987654, 6210987.1",y_coord
+map_y,"2543189.05, 5100234.5, 4455667",y_coord
+y_coordinate,"3321890.7, 6890123.45, 2987000",y_coord
+northing,"4826153.21, 5123456.7, 6890123",y_coord
+y_coord_proj,"2987154.55, 3456789.01, 5432109",y_coord
+map_y,"6543210.98, 4258963, 3876543.21",y_coord
+northing,"4835291.33, 3892145.8, 5412987",y_coord
+y_projected_coord,"2987453.1, 4500123.45, 6234567.89",y_coord
+map_y,"3345678, 5012345.6, 4289012.34",y_coord
+northing,"4501234.56, 5123456, 3987654.3",y_coord
+y_projected,"6019876.11, 2345678.9, 4999000",y_coord
+map_y,"3500123, 6754321.01, 2005678.5",y_coord
+northing,"4826351.72, 3998210.05, 6201745.0",y_coord
+y_coordinate_proj,"2588103.4, 5301998.11, 4112345.67",y_coord
+map_y,"6754321.9, 3141592, 4987234.50",y_coord
+northing,"4851325.67, 5123456.0, 3987654.21",y_coord
+map_y,"2987123.45, 6210987.5, 4500123.88",y_coord
+y_proj,"3456789.1, 5554321.99, 2801743.05",y_coord
+y_proj,"4251345.50, 4251890.11, 4252001.00",y_coord
+northing,"3489012.33, 3490123.45, 3488765.99",y_coord
+y_coordinate_meters,"3201456.78, 3201500.10, 3201987.65",y_coord
+Northing,"4851332.55, 6123456.7, 2987001",y_coord
+Projected Y Value,"5032145.1, 3876543.21, 6999888",y_coord
+Y Map Coordinate,"2405833, 4567890.12, 5321987.65",y_coord
+northing,"4512345.67, 3987654.1, 5123456",y_coord
+y_projected,"2890123.45, 6123456.7, 4876543",y_coord
+map_y,"3456789.01, 5554321.9, 6987123",y_coord
+northing,"4588331.12, 3890123.4, 5123456",y_coord
+y_coord_proj,"2876543.99, 6543210.8, 3344556.77",y_coord
+map_y,"4998765.43, 2123456.0, 5555555.55",y_coord
+y_northing,"4582103.55, 3998741, 6210987.1",y_coord
+map_y_proj,"2890123.4, 5001234.99, 3456789",y_coord
+y_projected,"4123456.78, 6876543.2, 2109876",y_coord
+northing,"4567890.12, 3123456.7, 5500100.0",y_coord
+y_projected,"2890543.55, 6123987, 4999888.9",y_coord
+map_y,"2050111.2, 6876543.21, 3456789",y_coord
+y_coordinate,"4862657.22, 3987123.5, 5123456",y_coord
+northing,"2950118.0, 6543210.99, 4500000.1",y_coord
+map_y,"3345890.75, 5876543.2, 2109876",y_coord
+northing,"4567890, 6123456.7, 2500123.45",y_coord
+map_y,"5150225.5, 3899100, 6987654.32",y_coord
+y_projected,"2112345.67, 4999888.8, 3456789",y_coord
+Projected Northing,"4532189.55, 6123456.0, 2890123.4",y_coord
+y_coord_proj,"3456789.1, 5001234.56, 6987654.32",y_coord
+Map Y Value,"2109876, 4876543.21, 5555555.5",y_coord
+Northing,"4865132.25, 3768425.50, 2845901",y_coord
+map_y,"5421890.11, 4509876, 3456789.9",y_coord
+y_projection,"6100345.78, 2998765.43, 4250000.00",y_coord
+y_coordinate,"4512345.67, 6890123.4, 2345678",y_coord
+northing_value,"5123456.78, 3987654.3, 4455667",y_coord
+map_y,"2876543.21, 6109876, 5050505.55",y_coord
+northing,"4861533.19, 3757821.5, 6350141.0",y_coord
+map_y,"2801443.3, 5209428.88, 4553109.9",y_coord
+y_proj,"4012971.05, 6711467.2, 2260195",y_coord
+projected_y_coord,"4567890.12, 3123456.7, 6543210",y_coord
+Vertical Northing,"2890123.45, 5555555.55, 4000000.0",y_coord
+map_northing,"6987654.32, 2109876, 3344556.78",y_coord
+Northing,"4862803.12, 5123456.7, 3987654",y_coord
+Projected Y,"6123456.78, 2500123.4, 4433221",y_coord
+Map Northing,"3141592, 5926535.8, 6804511.23",y_coord
+northing,"4532189.55, 6123456, 2890123.4",y_coord
+y_coordinate,"3456789.1, 5012345.67, 6987654",y_coord
+projected_y,"2123456.78, 4987654.3, 5555555.55",y_coord
+northing,"4521345.67, 5109872.1, 3987654",y_coord
+map_y,"6214321.05, 2876543.21, 4443322.9",y_coord
+y_coord_proj,"2054321.8, 6890123.45, 5500100.11",y_coord
+Northing,"4567890.12, 3123456, 5987654.3",y_coord
+Projected Y,"2890123.45, 6123456.7, 4444555",y_coord
+Map Y Value,"5050505.05, 2109876, 6999888.8",y_coord
+y_projected,"4567890.12, 3123456, 6890123.4",y_coord
+northing_m,"2501234.56, 5123456.7, 4200500",y_coord
+map_y_value,"3876543.21, 6109876, 4998877.9",y_coord
+northing,"3854123.55, 4987654.1, 6123456",y_coord
+y_coordinate,"2500100.7, 5555555.55, 4321098.21",y_coord
+map_y,"6987123.9, 2109876.0, 3456789.12",y_coord
+y_coord_mercator,"5253481.25, 4147714.50, 6222839.91",y_coord
+northing,"2891345.6, 4765982.11, 3501234.0",y_coord
+map_y_proj,"6987123.45, 2109876.54, 4567890.1",y_coord
+Northing,"4588331.12, 3987123.5, 6123456",y_coord
+Projected Y,"2890155.7, 5001234.99, 3456789.01",y_coord
+map_y,"6876543.21, 2109876.54, 5555555.55",y_coord
+northing,"4512345.67, 2890500, 6123456.1",y_coord
+projected_y,"3500123.45, 5554321.0, 2109876",y_coord
+map_y_coord,"6987123.99, 2000500.5, 4876543",y_coord
+northing,"4512345.6, 2890123.45, 6543210",y_coord
+y_coordinate,"3105821.5, 5050505, 6987123.99",y_coord
+map_y,"2500100.1, 4789012.34, 5555555.5",y_coord
+age_band_65_74,"12, 5, 33",non_spatial
+age_band_25_34,"7, 4, 19",non_spatial
+age_band_under_18,"1, 0, 2",non_spatial
+case_count_confirmed,"34, 61, 58",non_spatial
+case_count_staff,"8, 5, 30",non_spatial
+case_count_students,"2, 11, 18",non_spatial
+fund_balance_unrestricted,"3349144.12, -5904785.00, 3102020.88",non_spatial
+slot_machine_revenue,"7031832, 9608275, 7204987",non_spatial
+trust_fund_adjustment,"1829001.55, -213445.23, 998123.77",non_spatial
+municipal_budget_variance,"-152244.1, 348822.9, 58412.7",non_spatial
+ucc_filing_identifier,"0002271970, 0005082608, 0002870357",non_spatial
+lien_record_id,"009432187, 004872990, 000112345",non_spatial
+transaction_sequence_code,"A00329, A00331, A00412",non_spatial
+submission_reference_key,"ZZSEZCSJ, ZZHZEZWC, ZZSSWRRZ",non_spatial
+internal_control_hash,"9fh23k1A, 33kdPP92, zMN87aa1",non_spatial
+school_district_name,"Andover School District, Ansonia School District, West Haven School District",non_spatial
+county_reporting_zone,"T, NH, W",non_spatial
+governance_unit_type,"CCNH, CCNH/RHNS, CCNH and RHNS",non_spatial
+facility_ranking_group,"E, B, C",non_spatial
+moody_rating_status,"Aa3, Aaa, Aa2",non_spatial
+creditworthiness_tier,"BBB, BB+, A-",non_spatial
+risk_severity_flag,"High, Medium, Low",non_spatial
+consent_flag,"True, False, True",non_spatial
+submission_completed,"Yes, No, Yes",non_spatial
+review_required,"OK, FAIL, OK",non_spatial
+compliance_status_code,"Y, N, Y",non_spatial
+binary_approval_code,"1, 0, 1",non_spatial
+site_eligibility_indicator,"Eligible, Ineligible, Pending",non_spatial
+processing_switch,"On, Off, Off",non_spatial
+well_reference_marker,"MW-9, MW-1, MW-6",non_spatial
+component_serial_suffix,"JR, SR, 3RD",non_spatial
+component_batch_label,"Lot-A2, Lot-B1, Lot-C7",non_spatial
+inspection_grade_code,"P, NP, NP",non_spatial
+year_cycle,"2006.0, 2012.0, 2021.0",non_spatial
+report_period_block,"Q1-2023, Q2-2023, Q3-2023",non_spatial
+fiscal_week_code,"22, 21, 20",non_spatial
+fips_state_marker,"09, 10, 41",non_spatial
+severity_metric_score,"3.14, 9.81, 12.50",non_spatial
+impact_measurement_unit,"250, 98, 102",non_spatial
+temperature_sensor_readings,"72.4, 68.9, 76.1",non_spatial
+pressure_log_code,"14, 10, 9",non_spatial
+license_category_type,"Individual, Business, Corporate",non_spatial
+credential_role,"Pharmacist, Prescriber, Pharmacist's Delegate",non_spatial
+staff_position_type,"RN, LPN, CNA",non_spatial
+resident_gender_unknown,"0, 1, 5",non_spatial
+resident_marital_status_unknown,"2.0, 0.0, 3.0",non_spatial
+resident_ethnicity_other,"10, 0, 4",non_spatial
+insurance_classification,"Long Term Care, Private Pay, Medicaid Pending",non_spatial
+payer_category_code,"A01, B12, F09",non_spatial
+claim_outcome_flag,"APPROVED, DENIED, PENDING",non_spatial
+attendance_bucket,"104, 32, 45",non_spatial
+service_utilization_count,"7, 3, 1",non_spatial
+missed_service_events,"0, 4, 6",non_spatial
+audit_status_token,"Verified, Unverified, Flagged",non_spatial
+compliance_level_indicator,"Green, Yellow, Red",non_spatial
+operational_mode,"AUTO, MANUAL, AUTO",non_spatial

@@ -17,48 +17,61 @@ import torch.nn.functional as F
 from transformers import AutoConfig, AutoModel, AutoTokenizer
 
 
-class CTAClassificationModel(nn.Module):
-    """Simple classification model using any transformer encoder."""
+def mean_pool(outputs, attention_mask):
+    """Mean pooling over sequence length (matches train_cta_classifier.py)."""
+    token_embeddings = outputs.last_hidden_state
+    mask = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return (token_embeddings * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
 
-    def __init__(self, num_labels, config=None):
+
+class CTAClassificationModel(nn.Module):
+    """Classification model with mean pooling (matches train_cta_classifier.py)."""
+
+    def __init__(self, num_labels, config=None, use_spatial_head=False):
         super().__init__()
         self.encoder = AutoModel.from_config(config)
         hidden_size = self.encoder.config.hidden_size
         self.classifier = nn.Linear(hidden_size, num_labels)
+        self.use_spatial_head = use_spatial_head
+        if use_spatial_head:
+            self.spatial_head = nn.Linear(hidden_size, 2)
 
-    def forward(self, input_ids, attention_mask, labels=None):
+    def forward(self, input_ids, attention_mask, labels=None, spatial_labels=None):
         outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-        pooled = outputs.last_hidden_state[:, 0, :]
+        pooled = mean_pool(outputs, attention_mask)
         logits = self.classifier(pooled)
-        return type("Output", (), {"logits": logits})()
+
+        class Output:
+            pass
+
+        out = Output()
+        out.logits = logits
+        out.pooled = pooled
+        if self.use_spatial_head and spatial_labels is not None:
+            out.spatial_logits = self.spatial_head(pooled)
+        return out
 
 
 class CTAContrastiveModel(nn.Module):
-    """Encoder with projection head for contrastive learning."""
+    """Encoder with projection head for contrastive learning (matches train_cta_classifier.py)."""
 
     def __init__(self, embed_dim=128, num_labels=None, config=None):
         super().__init__()
         self.encoder = AutoModel.from_config(config)
         hidden_size = self.encoder.config.hidden_size
-
         self.projection = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, embed_dim),
         )
-
         self.classifier = nn.Linear(hidden_size, num_labels) if num_labels else None
 
     def forward(self, input_ids, attention_mask, return_embeddings=False):
         outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-        pooled = outputs.last_hidden_state[:, 0, :]
-
+        pooled = mean_pool(outputs, attention_mask)
         if return_embeddings:
             return F.normalize(self.projection(pooled), dim=1)
-
-        if self.classifier:
-            return self.classifier(pooled)
-        return pooled
+        return self.classifier(pooled) if self.classifier else pooled
 
     def get_embeddings(self, input_ids, attention_mask):
         return self.forward(input_ids, attention_mask, return_embeddings=True)
@@ -98,23 +111,43 @@ class CTAClassifier:
         # Load encoder config from saved directory
         encoder_config = AutoConfig.from_pretrained(str(self.model_dir))
 
-        # Load model based on mode
-        if self.mode == "classification":
-            self.model = CTAClassificationModel(
-                num_labels=len(self.classes),
-                config=encoder_config,
-            )
-        else:  # contrastive or combined
+        # Load checkpoint to inspect keys and determine model architecture
+        checkpoint_path = self.model_dir / "model.pt"
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        checkpoint_keys = set(checkpoint.keys())
+
+        # Detect model type from checkpoint keys (prioritize checkpoint structure over mode)
+        has_projection = any("projection" in k for k in checkpoint_keys)
+        has_spatial_head = any("spatial_head" in k for k in checkpoint_keys)
+
+        # Determine which model to use based on checkpoint structure
+        # If checkpoint has projection head, use contrastive model
+        # Otherwise, use classification model (works for classification, fine_tune, combined modes)
+        if has_projection:
+            # Contrastive model (has projection head)
             self.model = CTAContrastiveModel(
                 embed_dim=self.embed_dim,
                 num_labels=len(self.classes),
                 config=encoder_config,
             )
+        else:
+            # Classification model (no projection head)
+            # This works for classification, fine_tune, and combined modes
+            # since combined/fine_tune models are saved as classification models
+            self.model = CTAClassificationModel(
+                num_labels=len(self.classes),
+                config=encoder_config,
+                use_spatial_head=has_spatial_head,
+            )
 
-        # Load saved weights
-        self.model.load_state_dict(
-            torch.load(self.model_dir / "model.pt", map_location=self.device)
+        # Load saved weights (use strict=False to handle missing/extra keys gracefully)
+        missing_keys, unexpected_keys = self.model.load_state_dict(
+            checkpoint, strict=False
         )
+        if missing_keys:
+            print(f"Warning: Missing keys when loading model: {missing_keys}")
+        if unexpected_keys:
+            print(f"Warning: Unexpected keys when loading model: {unexpected_keys}")
 
         self.model.to(self.device)
         self.model.eval()
@@ -167,7 +200,7 @@ class CTAClassifier:
         encoding = self.tokenizer(
             text,
             truncation=True,
-            padding="max_length",
+            padding=True,  # Pad to longest in batch (more efficient)
             max_length=128,
             return_tensors="pt",
         )
@@ -176,11 +209,14 @@ class CTAClassifier:
             input_ids = encoding["input_ids"].to(self.device)
             attention_mask = encoding["attention_mask"].to(self.device)
 
-            if self.mode == "classification":
+            # Handle both model types
+            if isinstance(self.model, CTAClassificationModel):
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
                 logits = outputs.logits
-            else:
+            else:  # CTAContrastiveModel
                 logits = self.model(input_ids, attention_mask)
+                # If contrastive model doesn't have classifier, this won't work
+                # But based on training code, it should have classifier for inference
 
             probs = F.softmax(logits, dim=-1)[0]
             top_probs, top_indices = torch.topk(probs, min(top_k, len(self.classes)))
@@ -201,8 +237,8 @@ class CTAClassifier:
 
     def get_embedding(self, text: str) -> list[float]:
         """Get embedding vector for text (contrastive/combined modes only)."""
-        if self.mode == "classification":
-            raise ValueError("Embeddings only available for contrastive/combined modes")
+        if not isinstance(self.model, CTAContrastiveModel):
+            raise ValueError("Embeddings only available for contrastive models")
 
         # Apply structured formatting
         text = self._format_input(text)
@@ -210,7 +246,7 @@ class CTAClassifier:
         encoding = self.tokenizer(
             text,
             truncation=True,
-            padding="max_length",
+            padding=True,  # Pad to longest in batch (more efficient)
             max_length=128,
             return_tensors="pt",
         )
