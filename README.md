@@ -1,4 +1,4 @@
-# Datamart Profiler - CTA (Column Type Annotation)
+# atlas-profiler - CTA (Column Type Annotation)
 
 A machine learning pipeline for spatial column type classification with rule-based validation.
 
@@ -22,24 +22,26 @@ This system classifies tabular columns into spatial types (latitude, longitude, 
 
 ## Pipeline Workflow
 
+Training scripts and datasets live under `training/`.
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  1. DATA GENERATION                                                      │
-│     generate_synthetic_cta.py                                            │
+│     training/generate_synthetic_cta.py                                   │
 │     curated_spatial_cta.csv  ──►  LLM augmentation  ──►  synthetic_df.csv│
 └───────────────────────────────────────┬─────────────────────────────────┘
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  2. MODEL TRAINING                                                       │
-│     train_cta_classifier.py                                              │
+│     training/train_cta_classifier.py                                     │
 │     curated + synthetic data  ──►  BGE encoder + classifier  ──►  model/ │
 └───────────────────────────────────────┬─────────────────────────────────┘
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  3. INFERENCE + VALIDATION                                               │
-│     inference_cta.py + rules_cta.py                                      │
+│     training/inference_cta.py + training/rules_cta.py                    │
 │     ML prediction  ──►  rule-based validation  ──►  final classification │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -48,7 +50,7 @@ This system classifies tabular columns into spatial types (latitude, longitude, 
 
 ## Step 1: Generate Synthetic Training Data
 
-**Script:** `generate_synthetic_cta.py`
+**Script:** `training/generate_synthetic_cta.py`
 
 Uses an LLM to augment curated examples with diverse variations:
 
@@ -58,30 +60,33 @@ Uses an LLM to augment curated examples with diverse variations:
 
 ```bash
 # Generate synthetic data (default: 120 samples per class)
-python generate_synthetic_cta.py --target 120 --output synthetic_df.csv
+python training/generate_synthetic_cta.py \
+    --target 120 \
+    --curated-csv training/curated_spatial_cta.csv \
+    --output training/synthetic_df.csv
 
 # Custom settings
-python generate_synthetic_cta.py \
+python training/generate_synthetic_cta.py \
     --target 150 \
     --max-stale 15 \
-    --curated-csv curated_spatial_cta.csv \
-    --output synthetic_df.csv
+    --curated-csv training/curated_spatial_cta.csv \
+    --output training/synthetic_df.csv
 ```
 
 **Inputs:**
 
-- `curated_spatial_cta.csv` - Hand-labeled training examples
+- `training/curated_spatial_cta.csv` - Hand-labeled training examples
 
 **Outputs:**
 
-- `synthetic_df.csv` - Augmented training data
-- `synthetic_df_checkpoint.csv` - Incremental checkpoint (for resuming)
+- `training/synthetic_df.csv` - Augmented training data
+- `training/synthetic_df_checkpoint.csv` - Incremental checkpoint (for resuming)
 
 ---
 
 ## Step 2: Train the CTA Classifier
 
-**Script:** `train_cta_classifier.py`
+**Script:** `training/train_cta_classifier.py`
 
 Trains a transformer-based classifier using [BGE-small](https://huggingface.co/BAAI/bge-small-en-v1.5) as the encoder.
 
@@ -107,16 +112,16 @@ Column name is repeated (default: 3×) to emphasize its importance.
 
 ```bash
 # Standard classification (fast)
-python train_cta_classifier.py --mode classification --epochs 10
+python training/train_cta_classifier.py --mode classification --epochs 10
 
 # Supervised contrastive learning (better embeddings)
-python train_cta_classifier.py --mode contrastive --epochs 20 --temperature 0.07
+python training/train_cta_classifier.py --mode contrastive --epochs 20 --temperature 0.07
 
 # Combined training (recommended)
-python train_cta_classifier.py --mode combined --epochs 15 --alpha 0.5
+python training/train_cta_classifier.py --mode combined --epochs 15 --alpha 0.5
 
 # Full configuration
-python train_cta_classifier.py \
+python training/train_cta_classifier.py \
     --mode combined \
     --epochs 20 \
     --batch_size 32 \
@@ -124,9 +129,9 @@ python train_cta_classifier.py \
     --temperature 0.07 \
     --alpha 0.5 \
     --name_repeat 3 \
-    --output_dir ./model \
-    --curated_path curated_spatial_cta.csv \
-    --synthetic_path synthetic_df.csv
+    --output_dir profiler/model \
+    --curated_path training/curated_spatial_cta.csv \
+    --synthetic_path training/synthetic_df.csv
 ```
 
 ### Key Arguments
@@ -142,12 +147,12 @@ python train_cta_classifier.py \
 | `--name_repeat` | `3`              | Column name repetition count            |
 | `--output_dir`  | `./model`        | Model output directory                  |
 
-**Outputs:**
+**Outputs (in `--output_dir`, default `./model/`):**
 
-- `model/model.pt` - Trained model weights
-- `model/label_encoder.json` - Class labels and config
-- `model/config.json` - Encoder configuration
-- `model/tokenizer_config.json` - Tokenizer with special tokens
+- `model.pt` - Trained model weights
+- `label_encoder.json` - Class labels and config
+- `config.json` - Encoder configuration
+- `tokenizer_config.json` - Tokenizer with special tokens
 
 ---
 
@@ -155,34 +160,36 @@ python train_cta_classifier.py \
 
 ### Pure ML Inference
 
-**Script:** `inference_cta.py`
+**Script:** `training/inference_cta.py`
 
 ```bash
 # Text input
-python inference_cta.py --model_dir ./model --text "lat: 40.71, 40.72, 40.73"
+python training/inference_cta.py --model_dir profiler/model --text "lat: 40.71, 40.72, 40.73"
 
 # Column + values input
-python inference_cta.py --model_dir ./model --column "BOROUGH" --values "Manhattan, Brooklyn, Queens"
+python training/inference_cta.py --model_dir profiler/model --column "BOROUGH" --values "Manhattan, Brooklyn, Queens"
 
 # With confidence threshold (returns non_spatial if below)
-python inference_cta.py --model_dir ./model --text "col1: 123, 456" --threshold 0.5
+python training/inference_cta.py --model_dir profiler/model --text "col1: 123, 456" --threshold 0.5
 
 # Get embeddings (contrastive/combined modes only)
-python inference_cta.py --model_dir ./model --text "lat: 40.71" --embedding
+python training/inference_cta.py --model_dir profiler/model --text "lat: 40.71" --embedding
 ```
 
 ### Hybrid Classification (ML + Rules)
 
-**Script:** `rules_cta.py`
+**Script:** `training/rules_cta.py`
 
 The `HybridCTAClassifier` combines ML predictions with rule-based validation:
+
+Note: imports below assume `training/` is on your `PYTHONPATH` or you run from that directory.
 
 ```python
 from rules_cta import HybridCTAClassifier
 from inference_cta import CTAClassifier
 
 # Initialize
-ml_classifier = CTAClassifier("./model")
+ml_classifier = CTAClassifier("profiler/model")
 hybrid = HybridCTAClassifier(ml_classifier)
 
 # Classify
@@ -229,18 +236,26 @@ results = classifier.classify_dataframe(df, sample_size=100)
 ## Project Structure
 
 ```
-datamart-profiler/
-├── generate_synthetic_cta.py   # Step 1: LLM data augmentation
-├── train_cta_classifier.py     # Step 2: Model training
-├── inference_cta.py            # Step 3a: ML inference
-├── rules_cta.py                # Step 3b: Rule-based validation
-├── curated_spatial_cta.csv     # Curated training examples
-├── synthetic_df.csv            # Generated synthetic data
-└── model/                      # Trained model artifacts
-    ├── model.pt
-    ├── label_encoder.json
-    ├── config.json
-    └── tokenizer_config.json
+atlas-profiler/
+├── profiler/                   # Library package
+│   ├── core.py
+│   ├── spatial.py
+│   └── model/                  # Bundled model artifacts
+│       ├── model.pt
+│       ├── label_encoder.json
+│       ├── config.json
+│       └── tokenizer_config.json
+├── training/                   # Training + inference scripts/data
+│   ├── generate_synthetic_cta.py
+│   ├── train_cta_classifier.py
+│   ├── inference_cta.py
+│   ├── rules_cta.py
+│   ├── curated_spatial_cta.csv
+│   └── synthetic_df.csv
+├── output/
+├── results/
+├── README.md
+└── pyproject.toml
 ```
 
 ---
@@ -249,13 +264,21 @@ datamart-profiler/
 
 ```bash
 # 1. Generate synthetic training data
-python generate_synthetic_cta.py --target 120
+python training/generate_synthetic_cta.py \
+    --target 120 \
+    --curated-csv training/curated_spatial_cta.csv \
+    --output training/synthetic_df.csv
 
 # 2. Train the model (combined mode recommended)
-python train_cta_classifier.py --mode combined --epochs 15 --output_dir ./model
+python training/train_cta_classifier.py \
+    --mode combined \
+    --epochs 15 \
+    --output_dir profiler/model \
+    --curated_path training/curated_spatial_cta.csv \
+    --synthetic_path training/synthetic_df.csv
 
 # 3. Run inference
-python inference_cta.py --model_dir ./model --column "latitude" --values "40.71, 40.72"
+python training/inference_cta.py --model_dir profiler/model --column "latitude" --values "40.71, 40.72"
 ```
 
 ---
@@ -427,11 +450,11 @@ GEO_CLASSIFIER_SPATIAL_MAP = {
 ### Usage in Auctus
 
 ```python
-from datamart_profiler import process_dataset
-from datamart_profiler.spatial import GeoClassifier, HybridGeoClassifier
+from profiler import process_dataset
+from profiler.spatial import GeoClassifier, HybridGeoClassifier
 
 # Initialize classifier (auto-downloads model from NYU Box)
-geo_clf = HybridGeoClassifier(GeoClassifier(model_dir="model/"))
+geo_clf = HybridGeoClassifier(GeoClassifier())
 
 # Profile dataset with geo classifier
 metadata = process_dataset(

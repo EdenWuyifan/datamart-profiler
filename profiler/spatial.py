@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import json
 import logging
 import math
+import os
 import numpy
 import numpy.random
 import re
@@ -772,18 +773,26 @@ class GeoClassifier:
         Initialize the GeoClassifier.
 
         Args:
-            model_dir: Path to the model directory (default: profiler/model relative to profiler module)
+            model_dir: Path to the model directory (default: bundled model if present,
+                otherwise a user cache directory)
             auto_download: If True, automatically download model if not found
         """
+        required_files = list(GEO_MODEL_FILES.keys())
         if model_dir is None:
             # Default to profiler/model relative to this module's location
             profiler_dir = Path(__file__).parent
-            model_dir = str(profiler_dir / "model")
+            package_model_dir = profiler_dir / "model"
+            if all((package_model_dir / f).exists() for f in required_files):
+                model_dir = str(package_model_dir)
+            else:
+                cache_root = Path(
+                    os.getenv("XDG_CACHE_HOME", Path.home() / ".cache")
+                )
+                model_dir = str(cache_root / "datamart_profiler" / "model")
 
         self.model_dir = Path(model_dir)
 
         # Check if model files exist, download if needed
-        required_files = list(GEO_MODEL_FILES.keys())
         missing_files = [f for f in required_files if not (self.model_dir / f).exists()]
 
         if missing_files:

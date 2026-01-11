@@ -1,0 +1,13 @@
+include README.md
+include LICENSE
+global-exclude *.ipynb
+global-exclude *.bak
+global-exclude *.pyc
+recursive-exclude __pycache__ *
+recursive-exclude profiler/model *
+recursive-exclude output *
+recursive-exclude results *
+recursive-exclude training *
+recursive-exclude tmp *
+recursive-exclude oscur_datasets *
+recursive-exclude auctus *

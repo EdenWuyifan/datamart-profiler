@@ -1,15 +1,15 @@
 pandas
+python-dotenv
+transformers
+torch
+scikit-learn
+
+# Model training dependencies
+tqdm
+datasets
 fastparquet
 pyarrow
 huggingface_hub
-python-dotenv
-
-# Model training dependencies
-torch
-transformers
-scikit-learn
-tqdm
-datasets
 
 # For synthetic data generation (optional)
 langchain-openai
