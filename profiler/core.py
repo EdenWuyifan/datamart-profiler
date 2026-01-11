@@ -649,17 +649,21 @@ def process_dataset(
             )
         if geo_results:
             geo_df = pandas.DataFrame(geo_results)
-            if os.path.exists("geo_classifier_results.csv"):
+            if os.path.exists("output/geo_classifier_results.csv"):
                 mode = "a"
                 header = False
             else:
+                os.makedirs("output", exist_ok=True)
                 mode = "w"
                 header = True
             geo_df.to_csv(
-                "geo_classifier_results.csv", index=False, mode=mode, header=header
+                "output/geo_classifier_results.csv",
+                index=False,
+                mode=mode,
+                header=header,
             )
             logger.info(
-                "Saved %d geo classifier results to geo_classifier_results.csv",
+                "Saved %d geo classifier results to output/geo_classifier_results.csv",
                 len(geo_results),
             )
 
