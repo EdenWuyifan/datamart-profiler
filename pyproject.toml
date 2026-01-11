@@ -9,8 +9,9 @@ description = "Data profiling with spatial column type annotation."
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
+urls = {Homepage = "https://github.com/VIDA-NYU/atlas-profiler"}
 authors = [{name = "Eden Wu"}]
-keywords = ["data-profiling", "geospatial", "spatial"]
+keywords = ["Data Profiling", "Geospatial", "NYU"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -32,4 +33,4 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["profiler*"]
+include = ["profiler*", "atlas_profiler*"]
