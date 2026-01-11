@@ -785,10 +785,8 @@ class GeoClassifier:
             if all((package_model_dir / f).exists() for f in required_files):
                 model_dir = str(package_model_dir)
             else:
-                cache_root = Path(
-                    os.getenv("XDG_CACHE_HOME", Path.home() / ".cache")
-                )
-                model_dir = str(cache_root / "datamart_profiler" / "model")
+                cache_root = Path(os.getenv("XDG_CACHE_HOME", Path.home() / ".cache"))
+                model_dir = str(cache_root / "atlas_profiler" / "model")
 
         self.model_dir = Path(model_dir)
 

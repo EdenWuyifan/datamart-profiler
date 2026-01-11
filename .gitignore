@@ -5,6 +5,7 @@
 __pycache__
 **/__pycache__
 *.egg*
+dist
 
 .env
 .venv

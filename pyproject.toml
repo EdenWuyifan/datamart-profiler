@@ -4,18 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "atlas-profiler"
-version = "0.0.1b"
+version = "0.0.1b0"
 description = "Data profiling with spatial column type annotation."
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
 urls = {Homepage = "https://github.com/VIDA-NYU/atlas-profiler"}
 authors = [{name = "Eden Wu"}]
 keywords = ["Data Profiling", "Geospatial", "NYU"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.10",

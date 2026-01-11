@@ -20,9 +20,34 @@ This system classifies tabular columns into spatial types (latitude, longitude, 
 
 ---
 
-## Pipeline Workflow
+## PyPI Usage
+
+Install from PyPI and call the exported function:
+
+```bash
+pip install atlas-profiler
+```
+
+```python
+from atlas_profiler import process_dataset
+
+metadata = process_dataset("data.csv")
+```
+
+---
+
+## Training (from source)
+
+Clone the repo before running training scripts:
+
+```bash
+git clone https://github.com/VIDA-NYU/atlas-profiler.git
+cd atlas-profiler
+```
 
 Training scripts and datasets live under `training/`.
+
+## Pipeline Workflow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -261,6 +286,8 @@ atlas-profiler/
 ---
 
 ## Quick Start
+
+Clone the repo and `cd` into it before running the training steps below.
 
 ```bash
 # 1. Generate synthetic training data
