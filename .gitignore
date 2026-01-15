@@ -10,7 +10,6 @@ dist
 .env
 .venv
 oscur_datasets
-*.ipynb
 auctus
 
 results

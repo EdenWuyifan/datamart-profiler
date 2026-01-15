@@ -241,7 +241,7 @@ def process_column(
     manual=None,
     plots=True,
     coverage=True,
-    geo_data=None,
+    datamart_geo_data=None,
     nominatim=None,
     geo_prediction=None,  # Pre-computed from batch prediction
 ):
@@ -267,7 +267,7 @@ def process_column(
     # If geo prediction wasn't used, use regular identify_types
     if not used_geo_prediction:
         structural_type, semantic_types_dict, additional_meta = identify_types(
-            array, column_meta["name"], geo_data, manual
+            array, column_meta["name"], datamart_geo_data, manual
         )
 
     # Log column type with source information
@@ -463,10 +463,6 @@ def process_column(
 
 def process_dataset(
     data,
-    dataset_id=None,
-    metadata=None,
-    nominatim=None,
-    geo_data=None,
     geo_classifier=True,
     geo_classifier_threshold=0.5,
     include_sample=False,
@@ -474,17 +470,15 @@ def process_dataset(
     plots=False,
     indexes=True,
     load_max_size=None,
+    metadata=None,
+    nominatim=None,
+    datamart_geo_data=None,
     **kwargs,
 ):
     """Compute all metafeatures from a dataset.
 
     :param data: path to dataset, or file object, or DataFrame
-    :param dataset_id: id of the dataset
-    :param metadata: The metadata provided by the discovery plugin (might be
-        very limited).
-    :param nominatim: URL of the Nominatim server
-    :param geo_data: ``True`` or a datamart_geo.GeoData instance to use to
-        resolve named administrative territorial entities
+    :param geo_classifier: ``True`` to enable geo_classifier
     :param geo_classifier_threshold: Confidence threshold for geo_classifier
         predictions (default: 0.85). Predictions below this threshold will be
         treated as "non_spatial".
@@ -495,9 +489,14 @@ def process_dataset(
     :param indexes: Whether to include indexes. If True (the default), the
         input is a DataFrame, and it has index(es) different from the default
         range, they will appear in the result with the columns.
-    :param load_max_size: Target size of the data to be analyzed. The data will
+    :param load_max_size (bytes): Target size of the data to be analyzed. The data will
         be randomly sampled if it is bigger. Defaults to `MAX_SIZE`, currently
-        5 MB. This is different from the sample data included in the result.
+        5 MB (5000000). This is different from the sample data included in the result.
+    :param metadata: The metadata provided by the discovery plugin (might be
+        very limited).
+    :param nominatim: URL of the Nominatim server
+    :param datamart_geo_data: ``True`` or a datamart_geo.GeoData instance to use to
+        resolve named administrative territorial entities
     :return: JSON structure (dict)
     """
     # Track runtime for each pipeline step
@@ -515,10 +514,10 @@ def process_dataset(
             "process_dataset() got unexpected keyword argument %r" % next(iter(kwargs))
         )
 
-    if geo_data is True:
+    if datamart_geo_data is True:
         from datamart_geo import GeoData
 
-        geo_data = GeoData.from_local_cache()
+        datamart_geo_data = GeoData.from_local_cache()
 
     if geo_classifier is True:
         geo_classifier = HybridGeoClassifier(GeoClassifier())
@@ -686,7 +685,7 @@ def process_dataset(
             manual=manual_columns.get(column_meta["name"]),
             plots=plots,
             coverage=coverage,
-            geo_data=geo_data,
+            datamart_geo_data=datamart_geo_data,
             nominatim=nominatim,
             geo_prediction=geo_predictions.get(col_idx),
         )

@@ -20,6 +20,15 @@ This system classifies tabular columns into spatial types (latitude, longitude, 
 
 ---
 
+## Disclaimer
+
+This project reuses the structure and main logic of Datamart Profiler. Please give credit to:
+
+- Datamart Profiler (codebase): https://gitlab.com/ViDA-NYU/auctus/auctus
+- Datamart Profiler (PyPI): https://pypi.org/project/datamart-profiler/
+
+---
+
 ## PyPI Usage
 
 Install from PyPI and call the exported function:
@@ -33,6 +42,34 @@ from atlas_profiler import process_dataset
 
 metadata = process_dataset("data.csv")
 ```
+
+Key parameters for `process_dataset`:
+
+```python
+metadata = process_dataset(
+    data,
+    geo_classifier=True,
+    geo_classifier_threshold=0.5,
+    include_sample=False,
+    coverage=True,
+    plots=False,
+    indexes=True,
+    load_max_size=None,
+    metadata=None,
+    nominatim=None,
+)
+```
+
+- `data`: Path to a dataset, a file-like object, or a pandas DataFrame.
+- `geo_classifier`: `True` to enable the default ML classifier, or pass a classifier instance.
+- `geo_classifier_threshold`: Confidence cutoff for classifier predictions; below this is treated as `non_spatial`.
+- `include_sample`: `True` to include a small random CSV sample in the output metadata.
+- `coverage`: Compute data ranges (spatial/temporal coverage) when `True`.
+- `plots`: Include plots in the output metadata when `True`.
+- `indexes`: If `True`, include non-default DataFrame indexes as columns.
+- `load_max_size`: Target max bytes to load; larger inputs are randomly sampled (defaults to `MAX_SIZE`, 5000000 bytes).
+- `metadata`: Optional seed metadata dict (e.g., from a discovery plugin).
+- `nominatim`: Base URL of a Nominatim server for resolving address strings.
 
 ---
 

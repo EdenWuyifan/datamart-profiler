@@ -144,12 +144,14 @@ def parse_dates(array):
     return parsed_dates
 
 
-def identify_types(array, name, geo_data, manual=None):
+def identify_types(array, name, datamart_geo_data, manual=None):
     """Identify the structural type and semantic types of an array.
 
     :param array: The list, series, or array to inspect
     :param name: The name of this column. This is taken into account for some
         heuristics like latitude, longitude, year number.
+    :param datamart_geo_data: A datamart_geo.GeoData instance to use to resolve
+        named administrative territorial entities.
     :param manual: Manual information provided by the user that will be
         reconciled with the observed data.
     :return: A tuple ``(structural_type, semantic_types_dict, column_meta)``
@@ -216,8 +218,8 @@ def identify_types(array, name, geo_data, manual=None):
                 dates = parse_dates(array)
                 semantic_types_dict[types.DATE_TIME] = dates
             if el == types.ADMIN:
-                if geo_data is not None and len(distinct_values) >= 3:
-                    admin_areas = geo_data.resolve_names_all(array)
+                if datamart_geo_data is not None and len(distinct_values) >= 3:
+                    admin_areas = datamart_geo_data.resolve_names_all(array)
                     admin_areas = [r for r in admin_areas if r]
                     if admin_areas:
                         admin_areas = disambiguate_admin_areas(admin_areas)
@@ -254,8 +256,8 @@ def identify_types(array, name, geo_data, manual=None):
                 semantic_types_dict[types.FILE_PATH] = None
 
             # Administrative areas
-            if geo_data is not None and len(distinct_values) >= 3:
-                admin_areas = geo_data.resolve_names_all(distinct_values)
+            if datamart_geo_data is not None and len(distinct_values) >= 3:
+                admin_areas = datamart_geo_data.resolve_names_all(distinct_values)
                 admin_areas = [r for r in admin_areas if r]
                 if len(admin_areas) > 0.7 * len(distinct_values):
 
