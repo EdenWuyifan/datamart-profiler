@@ -45,6 +45,24 @@ from transformers import (
 
 MODEL_NAME = "BAAI/bge-base-en-v1.5"
 SPECIAL_TOKENS = {"col_token": "[COL]", "val_token": "[VAL]"}
+DEFAULT_SPATIAL_LABELS = {
+    "latitude",
+    "longitude",
+    "x_coord",
+    "y_coord",
+    "bbl",
+    "bin",
+    "zip_code",
+    "borough_code",
+    "city",
+    "state",
+    "address",
+    "point",
+    "line",
+    "polygon",
+    "multi-polygon",
+    "multi-line",
+}
 
 
 # ============================================================================
@@ -189,24 +207,30 @@ def load_training_data(synthetic_path="synthetic_df.csv", name_repeat=3):
 class CTADataset(Dataset):
     """Dataset for classification."""
 
-    def __init__(self, texts, labels, tokenizer, non_spatial_id, max_length=128):
+    def __init__(
+        self, texts, labels, tokenizer, spatial_label_ids=None, max_length=128
+    ):
         self.encodings = tokenizer(
             texts, truncation=True, padding="max_length", max_length=max_length
         )
         self.labels = labels
-        self.non_spatial_id = non_spatial_id
+        self.spatial_label_ids = spatial_label_ids
 
     def __len__(self):
         return len(self.labels)
 
     def __getitem__(self, idx):
         label = self.labels[idx]
-        return {
+        item = {
             "input_ids": torch.tensor(self.encodings["input_ids"][idx]),
             "attention_mask": torch.tensor(self.encodings["attention_mask"][idx]),
             "labels": torch.tensor(label),
-            "spatial_labels": torch.tensor(0 if label == self.non_spatial_id else 1),
         }
+        if self.spatial_label_ids is not None:
+            item["spatial_labels"] = torch.tensor(
+                1 if label in self.spatial_label_ids else 0
+            )
+        return item
 
 
 class EmbedDataset(Dataset):
@@ -677,15 +701,15 @@ def run_classification(
     val_labels,
     tokenizer,
     num_labels,
-    non_spatial_id,
+    spatial_label_ids,
     device,
 ):
     """Run standard classification from scratch."""
     train_ds = CTADataset(
-        train_texts, train_labels, tokenizer, non_spatial_id, args.max_length
+        train_texts, train_labels, tokenizer, spatial_label_ids, args.max_length
     )
     val_ds = CTADataset(
-        val_texts, val_labels, tokenizer, non_spatial_id, args.max_length
+        val_texts, val_labels, tokenizer, spatial_label_ids, args.max_length
     )
 
     model = CTAClassificationModel(num_labels, use_spatial_head=args.use_spatial_head)
@@ -715,7 +739,7 @@ def run_contrastive(
     val_labels,
     tokenizer,
     num_labels,
-    non_spatial_id,
+    spatial_label_ids,
     device,
 ):
     """Run Stage 1: Contrastive pre-training."""
@@ -757,7 +781,7 @@ def run_fine_tune(
     val_labels,
     tokenizer,
     num_labels,
-    non_spatial_id,
+    spatial_label_ids,
     device,
 ):
     """Run Stage 2: Classification fine-tuning."""
@@ -789,10 +813,10 @@ def run_fine_tune(
         model.freeze_encoder()
 
     train_ds = CTADataset(
-        train_texts, train_labels, tokenizer, non_spatial_id, args.max_length
+        train_texts, train_labels, tokenizer, spatial_label_ids, args.max_length
     )
     val_ds = CTADataset(
-        val_texts, val_labels, tokenizer, non_spatial_id, args.max_length
+        val_texts, val_labels, tokenizer, spatial_label_ids, args.max_length
     )
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
@@ -825,7 +849,7 @@ def run_combined(
     val_labels,
     tokenizer,
     num_labels,
-    non_spatial_id,
+    spatial_label_ids,
     device,
 ):
     """Run Stage 3: Combined multi-task polish."""
@@ -835,10 +859,10 @@ def run_combined(
     print(f"⚠️  Using alpha={args.alpha}. Should be low (0.1-0.3) after pre-training.")
 
     train_ds = CTADataset(
-        train_texts, train_labels, tokenizer, non_spatial_id, args.max_length
+        train_texts, train_labels, tokenizer, spatial_label_ids, args.max_length
     )
     val_ds = CTADataset(
-        val_texts, val_labels, tokenizer, non_spatial_id, args.max_length
+        val_texts, val_labels, tokenizer, spatial_label_ids, args.max_length
     )
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
@@ -979,10 +1003,29 @@ Curriculum Learning Pipeline:
     df = load_training_data(args.synthetic_path, args.name_repeat)
     label_encoder = LabelEncoder()
     df["label_id"] = label_encoder.fit_transform(df["label"])
-    non_spatial_id = label_encoder.transform(["non_spatial"])[0]
     num_labels = len(label_encoder.classes_)
     print(f"Number of classes: {num_labels}")
     print(f"Classes: {label_encoder.classes_.tolist()}")
+
+    spatial_label_names = DEFAULT_SPATIAL_LABELS
+
+    if args.use_spatial_head:
+        present = spatial_label_names.intersection(label_encoder.classes_)
+        missing = spatial_label_names.difference(label_encoder.classes_)
+        if missing:
+            print(
+                f"⚠️  Spatial labels not in dataset (ignored): {sorted(missing)}"
+            )
+        spatial_label_ids = (
+            {label_encoder.transform([name])[0] for name in present}
+            if present
+            else None
+        )
+        if spatial_label_ids is None:
+            print("⚠️  No spatial labels found. Disabling spatial head.")
+            args.use_spatial_head = False
+    else:
+        spatial_label_ids = None
 
     train_texts, val_texts, train_labels, val_labels = train_test_split(
         df["text"].tolist(),
@@ -1017,7 +1060,7 @@ Curriculum Learning Pipeline:
         val_labels,
         tokenizer,
         num_labels,
-        non_spatial_id,
+        spatial_label_ids,
         device,
     )
 

@@ -13,10 +13,28 @@ This system classifies tabular columns into spatial types (latitude, longitude, 
 - `bbl` - Borough-Block-Lot (NYC property identifier)
 - `bin` - Building Identification Number
 - `zip_code` - Postal codes (worldwide)
-- `borough_code` - District/borough codes
+- `borough_code` - District/borough codes (ONLY NYC)
 - `city`, `state`, `address` - Location strings
 - `point`, `line`, `polygon`, `multi-polygon`, `multi-line` - WKT geometries
 - `non_spatial` - Non-spatial identifiers
+
+**Next Steps (expand on non-spatial from Faker):**
+- ean8, ean13 - barcode
+- hex_color, rgb_color - color codes
+- company - company names
+- credit_card_number - credit card numbers
+- currency_code - currency codes
+- unix_time, iso8601, date_time - timestamps
+- year, month_name, month, day_of_week, day_of_month - date parts
+- file_extension, file_name - file metadata
+- email - email addresses
+- url - website URLs
+- ipv6, ipv4 - IP addresses
+- mac_address - MAC addresses
+- job - job titles
+- name, last_name, first_name, prefix - personal names
+- phone_number - phone numbers
+- ssn - social security numbers
 
 ---
 
@@ -150,15 +168,18 @@ python training/generate_synthetic_cta.py \
 
 **Script:** `training/train_cta_classifier.py`
 
-Trains a transformer-based classifier using [BGE-small](https://huggingface.co/BAAI/bge-small-en-v1.5) as the encoder.
+Trains a transformer-based classifier using `BAAI/bge-base-en-v1.5` as the encoder.
 
-### Training Modes
+### Training Modes (Single-Mode Runs)
 
-| Mode             | Description                              | Best For          |
-| ---------------- | ---------------------------------------- | ----------------- |
-| `classification` | Standard cross-entropy loss              | Fast baseline     |
-| `contrastive`    | Supervised contrastive learning (SupCon) | Better embeddings |
-| `combined`       | Contrastive + classification loss        | **Recommended**   |
+| Mode             | Description                                                 | Best For                                 |
+| ---------------- | ----------------------------------------------------------- | ---------------------------------------- |
+| `classification` | Standard cross-entropy loss (train from scratch)            | Fast baseline                            |
+| `contrastive`    | Contrastive pre-training (encoder only)                     | Learning better embeddings               |
+| `fine_tune`      | Classification fine-tune using a pretrained encoder         | Recommended Stage 2 after contrastive    |
+| `combined`       | Classification + small contrastive regularizer (low alpha)  | Optional Stage 3 polish after fine_tune  |
+
+Note: `combined` expects a **full fine-tuned checkpoint** (encoder + classifier), not just a contrastive encoder.
 
 ### Input Format
 
@@ -170,7 +191,33 @@ Uses structured tokens for emphasis:
 
 Column name is repeated (default: 3×) to emphasize its importance.
 
-### Usage
+### Recommended Curriculum (3 Stages)
+
+Run these **in order** (each stage is a separate command):
+
+```bash
+# Stage 1: Contrastive pre-training
+python training/train_cta_classifier.py \
+    --mode contrastive \
+    --epochs 20 \
+    --output_dir ./model_contrastive
+
+# Stage 2: Classification fine-tune (uses Stage 1 encoder)
+python training/train_cta_classifier.py \
+    --mode fine_tune \
+    --load_encoder_from ./model_contrastive/model.pt \
+    --epochs 10 \
+    --output_dir ./model_fine_tune
+
+# Stage 3 (optional): Combined polish (uses full Stage 2 checkpoint)
+python training/train_cta_classifier.py \
+    --mode combined \
+    --load_encoder_from ./model_fine_tune/model.pt \
+    --alpha 0.2 \
+    --epochs 5
+```
+
+### Single-Mode Usage
 
 ```bash
 # Standard classification (fast)
@@ -179,20 +226,19 @@ python training/train_cta_classifier.py --mode classification --epochs 10
 # Supervised contrastive learning (better embeddings)
 python training/train_cta_classifier.py --mode contrastive --epochs 20 --temperature 0.07
 
-# Combined training (recommended)
-python training/train_cta_classifier.py --mode combined --epochs 15 --alpha 0.5
+# Combined training (optional polish after fine_tune)
+python training/train_cta_classifier.py --mode combined --epochs 5 --alpha 0.2
 
 # Full configuration
 python training/train_cta_classifier.py \
     --mode combined \
-    --epochs 20 \
+    --epochs 5 \
     --batch_size 32 \
     --lr 3e-5 \
     --temperature 0.07 \
-    --alpha 0.5 \
+    --alpha 0.2 \
     --name_repeat 3 \
     --output_dir profiler/model \
-    --curated_path training/curated_spatial_cta.csv \
     --synthetic_path training/synthetic_df.csv
 ```
 
@@ -205,7 +251,7 @@ python training/train_cta_classifier.py \
 | `--batch_size`  | `16`             | Batch size                              |
 | `--lr`          | `2e-5`           | Learning rate                           |
 | `--temperature` | `0.07`           | Contrastive loss temperature            |
-| `--alpha`       | `0.5`            | Contrastive loss weight (combined mode) |
+| `--alpha`       | `0.2`            | Contrastive loss weight (combined mode) |
 | `--name_repeat` | `3`              | Column name repetition count            |
 | `--output_dir`  | `./model`        | Model output directory                  |
 
@@ -333,13 +379,17 @@ python training/generate_synthetic_cta.py \
     --curated-csv training/curated_spatial_cta.csv \
     --output training/synthetic_df.csv
 
-# 2. Train the model (combined mode recommended)
+# 2. Train the model (recommended curriculum)
 python training/train_cta_classifier.py \
-    --mode combined \
-    --epochs 15 \
-    --output_dir profiler/model \
-    --curated_path training/curated_spatial_cta.csv \
-    --synthetic_path training/synthetic_df.csv
+    --mode contrastive \
+    --epochs 20 \
+    --output_dir ./model_contrastive
+
+python training/train_cta_classifier.py \
+    --mode fine_tune \
+    --load_encoder_from ./model_contrastive/model.pt \
+    --epochs 10 \
+    --output_dir profiler/model
 
 # 3. Run inference
 python training/inference_cta.py --model_dir profiler/model --column "latitude" --values "40.71, 40.72"
