@@ -68,6 +68,7 @@ metadata = process_dataset(
     data,
     geo_classifier=True,
     geo_classifier_threshold=0.5,
+    geo_classifier_model_dir=None,
     include_sample=False,
     coverage=True,
     plots=False,
@@ -81,6 +82,7 @@ metadata = process_dataset(
 - `data`: Path to a dataset, a file-like object, or a pandas DataFrame.
 - `geo_classifier`: `True` to enable the default ML classifier, or pass a classifier instance.
 - `geo_classifier_threshold`: Confidence cutoff for classifier predictions; below this is flagged low-confidence and does not override heuristics.
+- `geo_classifier_model_dir`: Optional model directory path for CTA model files (used when `geo_classifier=True`).
 - `include_sample`: `True` to include a small random CSV sample in the output metadata.
 - `coverage`: Compute data ranges (spatial/temporal coverage) when `True`.
 - `plots`: Include plots in the output metadata when `True`.

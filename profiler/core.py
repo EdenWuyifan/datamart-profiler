@@ -581,6 +581,7 @@ def process_dataset(
     data,
     geo_classifier=True,
     geo_classifier_threshold=0.5,
+    geo_classifier_model_dir=None,
     include_sample=False,
     coverage=True,
     plots=False,
@@ -598,6 +599,8 @@ def process_dataset(
     :param geo_classifier_threshold: Confidence threshold for geo_classifier
         predictions (default: 0.85). Predictions below this threshold are
         flagged as low-confidence and do not override heuristics.
+    :param geo_classifier_model_dir: Optional model directory to load CTA model
+        files from when geo_classifier is True.
     :param include_sample: Set to True to include a few random rows to the
         result. Useful to present to a user.
     :param coverage: Whether to compute data ranges
@@ -636,7 +639,9 @@ def process_dataset(
         datamart_geo_data = GeoData.from_local_cache()
 
     if geo_classifier is True:
-        geo_classifier = HybridGeoClassifier(GeoClassifier())
+        geo_classifier = HybridGeoClassifier(
+            GeoClassifier(model_dir=geo_classifier_model_dir)
+        )
 
     if metadata is None:
         metadata = {}
