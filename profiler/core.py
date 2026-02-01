@@ -810,6 +810,45 @@ def process_dataset(
                 len(geo_results),
             )
 
+        all_results = []
+        for col_idx, prediction in geo_predictions.items():
+            column_meta = columns[col_idx]
+            label = prediction.get("label")
+            if not label or prediction.get("filtered") or prediction.get("rejected"):
+                continue
+            if "validated" in prediction and not prediction.get("validated"):
+                continue
+            all_results.append(
+                {
+                    "name": column_meta["name"],
+                    "values": prediction.get("sample_values", []),
+                    "label": label,
+                    "confidence": prediction.get("confidence"),
+                    "source": prediction.get("source", "ml"),
+                    "validated": prediction.get("validated"),
+                }
+            )
+
+        if all_results:
+            all_df = pandas.DataFrame(all_results)
+            if os.path.exists("output/classifier_results.csv"):
+                mode = "a"
+                header = False
+            else:
+                os.makedirs("output", exist_ok=True)
+                mode = "w"
+                header = True
+            all_df.to_csv(
+                "output/classifier_results.csv",
+                index=False,
+                mode=mode,
+                header=header,
+            )
+            logger.info(
+                "Saved %d classifier results to output/classifier_results.csv",
+                len(all_results),
+            )
+
     logger.info(
         "[STEP 2/6] Geo batch prediction completed in %.3fs (%d columns)",
         step_times["2_geo_batch_predict"],
