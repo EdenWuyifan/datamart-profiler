@@ -1,5 +1,5 @@
 import collections
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import numpy
 import os
@@ -385,6 +385,24 @@ def process_column(
             for sem_type in CLASSIFIER_SEMANTIC_MAP[label]:
                 semantic_types_dict.setdefault(sem_type, None)
 
+    if types.DATE_TIME in semantic_types_dict:
+        datetimes = semantic_types_dict[types.DATE_TIME]
+        if datetimes is None:
+            datetimes = []
+            if classifier_meta is not None and classifier_meta.get("label") == "unix_time":
+                for value in array:
+                    try:
+                        ts = float(value)
+                    except (TypeError, ValueError):
+                        continue
+                    if abs(ts) > 1_000_000_000_000:
+                        ts /= 1000.0
+                    try:
+                        datetimes.append(datetime.fromtimestamp(ts, tz=timezone.utc))
+                    except (OverflowError, OSError, ValueError):
+                        continue
+            semantic_types_dict[types.DATE_TIME] = datetimes
+
     # Log column type with source information
     if used_geo_prediction:
         geo_info = additional_meta.get("geo_classifier", {})
@@ -472,7 +490,7 @@ def process_column(
             }
 
     if types.DATE_TIME in semantic_types_dict:
-        datetimes = semantic_types_dict[types.DATE_TIME]
+        datetimes = semantic_types_dict[types.DATE_TIME] or []
         resolved["datetimes"] = datetimes
         timestamps = numpy.empty(
             len(datetimes),
