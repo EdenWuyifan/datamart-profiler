@@ -189,7 +189,7 @@ class CTAClassifier:
         Args:
             text: Format "column_name: value1, value2, value3"
             top_k: Number of top predictions to return
-            threshold: If set, returns "non_spatial" when top confidence < threshold
+            threshold: If set, filters out predictions below this confidence
 
         Returns:
             List of dicts with 'label' and 'confidence'
@@ -226,12 +226,8 @@ class CTAClassifier:
             for idx, prob in zip(top_indices.tolist(), top_probs.tolist())
         ]
 
-        # If threshold set and top prediction is below it, prepend non_spatial
-        if threshold is not None and results[0]["confidence"] < threshold:
-            results.insert(
-                0,
-                {"label": "non_spatial", "confidence": 1.0 - results[0]["confidence"]},
-            )
+        if threshold is not None:
+            results = [r for r in results if r["confidence"] >= threshold]
 
         return results
 
@@ -282,7 +278,7 @@ def main():
         "--threshold",
         type=float,
         default=None,
-        help="Confidence threshold; below this returns 'non_spatial' (e.g., 0.5)",
+        help="Confidence threshold; filters out predictions below this (e.g., 0.5)",
     )
     parser.add_argument(
         "--embedding",
