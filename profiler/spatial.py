@@ -919,7 +919,7 @@ class GeoClassifier:
 
         Args:
             texts: List of texts in format "column_name: val1, val2, val3"
-            threshold: Confidence threshold below which to return non_spatial
+            threshold: Confidence threshold; predictions below this are flagged
 
         Returns:
             List of dicts with 'label' and 'confidence' for each input
@@ -965,8 +965,9 @@ class GeoClassifier:
             if threshold is not None and confidence < threshold:
                 results.append(
                     {
-                        "label": "non_spatial",
-                        "confidence": 1.0 - confidence,
+                        "label": label,
+                        "confidence": confidence,
+                        "filtered": True,
                     }
                 )
             else:
@@ -985,8 +986,8 @@ class HybridGeoClassifier:
     Hybrid classifier: ML prediction first, then rule-based validation.
 
     For sensitive spatial types (BBL, BIN, lat/lon, zip, geometry), validates
-    the ML prediction with pattern/range checks. If validation fails, returns
-    non_spatial to avoid false positives.
+    the ML prediction with pattern/range checks. If validation fails, marks the
+    prediction as rejected so heuristics can take over.
     """
 
     # Types requiring rule-based validation after ML prediction
@@ -999,6 +1000,7 @@ class HybridGeoClassifier:
         "y_coord",
         "zip5",  # 5-digit ZIP code
         "zip9",  # 9-digit ZIP+4 code
+        "zip_code",  # Generic ZIP code label
         "state_code",  # State codes (e.g., "NY", "CA")
         "borough",  # Named boroughs (e.g., "Brooklyn", "Queens")
         "borough_code",  # Borough codes (numeric/alphanumeric)
@@ -1290,16 +1292,17 @@ class HybridGeoClassifier:
         # Validate each result with rules
         final_results = []
         for (column_name, values), ml_pred in zip(columns_data, ml_results):
-            label = ml_pred["label"]
-            confidence = ml_pred["confidence"]
+            label = ml_pred.get("label")
+            confidence = ml_pred.get("confidence", 0.0)
 
-            # If already non_spatial (from threshold), keep it
-            if label == "non_spatial":
+            # If below threshold, keep prediction but mark as filtered
+            if ml_pred.get("filtered"):
                 final_results.append(
                     {
-                        "label": "non_spatial",
+                        "label": label,
                         "confidence": confidence,
                         "source": "ml_low_conf",
+                        "filtered": True,
                     }
                 )
                 continue
@@ -1323,10 +1326,11 @@ class HybridGeoClassifier:
                     )
                     final_results.append(
                         {
-                            "label": "non_spatial",
-                            "confidence": 0.9,
-                            "source": f"ml:{label}→rejected",
+                            "label": label,
+                            "confidence": confidence,
+                            "source": f"ml:{label}->rejected",
                             "validated": False,
+                            "rejected": True,
                         }
                     )
             else:

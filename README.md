@@ -1,10 +1,10 @@
 # atlas-profiler - CTA (Column Type Annotation)
 
-A machine learning pipeline for spatial column type classification with rule-based validation.
+A machine learning pipeline for column type classification (spatial + non-spatial) with rule-based validation.
 
 ## Overview
 
-This system classifies tabular columns into spatial types (latitude, longitude, BBL, BIN, zip codes, geometries, etc.) using a hybrid ML + rules approach.
+This system classifies tabular columns into spatial and non-spatial types (latitude, longitude, BBL, BIN, zip codes, geometries, identifiers, etc.) using a hybrid ML + rules approach.
 
 **Supported Column Types:**
 
@@ -16,9 +16,9 @@ This system classifies tabular columns into spatial types (latitude, longitude, 
 - `borough_code` - District/borough codes (ONLY NYC)
 - `city`, `state`, `address` - Location strings
 - `point`, `line`, `polygon`, `multi-polygon`, `multi-line` - WKT geometries
-- `non_spatial` - Non-spatial identifiers
+- `identifier` - Generic identifiers
 
-**Next Steps (expand on non-spatial from Faker):**
+**Non-spatial categories (examples):**
 - ean8, ean13 - barcode
 - hex_color, rgb_color - color codes
 - company - company names
@@ -80,7 +80,7 @@ metadata = process_dataset(
 
 - `data`: Path to a dataset, a file-like object, or a pandas DataFrame.
 - `geo_classifier`: `True` to enable the default ML classifier, or pass a classifier instance.
-- `geo_classifier_threshold`: Confidence cutoff for classifier predictions; below this is treated as `non_spatial`.
+- `geo_classifier_threshold`: Confidence cutoff for classifier predictions; below this is flagged low-confidence and does not override heuristics.
 - `include_sample`: `True` to include a small random CSV sample in the output metadata.
 - `coverage`: Compute data ranges (spatial/temporal coverage) when `True`.
 - `plots`: Include plots in the output metadata when `True`.
@@ -277,7 +277,7 @@ python training/inference_cta.py --model_dir profiler/model --text "lat: 40.71, 
 # Column + values input
 python training/inference_cta.py --model_dir profiler/model --column "BOROUGH" --values "Manhattan, Brooklyn, Queens"
 
-# With confidence threshold (returns non_spatial if below)
+# With confidence threshold (filters out low-confidence predictions)
 python training/inference_cta.py --model_dir profiler/model --text "col1: 123, 456" --threshold 0.5
 
 # Get embeddings (contrastive/combined modes only)
@@ -322,7 +322,7 @@ For sensitive spatial types, ML predictions are validated against rules:
 **Validation outcomes:**
 
 - ✅ **Passed:** Return ML prediction with `source: "ml+validated"`
-- ❌ **Failed:** Return `non_spatial` with `source: "ml:{type}→rule_rejected"`
+- ❌ **Failed:** Drop invalid spatial prediction and fall back to other ML results or rules
 
 ### Standalone Rule-Based Classification
 

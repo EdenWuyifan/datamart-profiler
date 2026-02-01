@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 # Mapping from GeoClassifier labels to (structural_type, [semantic_types])
-# Only spatial types are included - "non_spatial" falls through to regular workflow
+# Only spatial types are included - other labels fall through to regular workflow
 GEO_CLASSIFIER_SPATIAL_MAP = {
     # Lat/Long coordinates
     "latitude": (types.FLOAT, [types.LATITUDE]),
@@ -47,6 +47,7 @@ GEO_CLASSIFIER_SPATIAL_MAP = {
     # Address-related
     "zip5": (types.TEXT, [types.ADDRESS]),
     "zip9": (types.TEXT, [types.ADDRESS]),
+    "zip_code": (types.TEXT, [types.ADDRESS]),
     "address": (types.TEXT, [types.ADDRESS]),
     # Administrative areas
     "borough": (
@@ -61,6 +62,92 @@ GEO_CLASSIFIER_SPATIAL_MAP = {
     # NYC-specific identifiers (spatial context)
     "bbl": (types.INTEGER, [types.ID]),
     "bin": (types.INTEGER, [types.ID]),
+}
+
+CLASSIFIER_SEMANTIC_MAP = {
+    # Spatial
+    "latitude": [types.LATITUDE],
+    "longitude": [types.LONGITUDE],
+    "point": [types.GEO_POINT],
+    "polygon": [types.GEO_POLYGON],
+    "multi-polygon": [types.GEO_POLYGON],
+    "line": [types.GEO_POLYGON],
+    "multi-line": [types.GEO_POLYGON],
+    "zip5": [types.POSTAL_CODE, types.ADDRESS],
+    "zip9": [types.POSTAL_CODE, types.ADDRESS],
+    "zip_code": [types.POSTAL_CODE, types.ADDRESS],
+    "address": [types.ADDRESS],
+    "city": [types.ADDRESS_LOCALITY, types.ADMIN],
+    "state": [types.ADDRESS_REGION, types.ADMIN],
+    "state_code": [types.ADDRESS_REGION, types.ADMIN],
+    "country": [types.ADDRESS_COUNTRY, types.ADMIN],
+    "borough": [types.ADMIN],
+    "borough_code": [types.ADMIN],
+    "bbl": [types.ID],
+    "bin": [types.ID],
+    # Non-spatial
+    "identifier": [types.ID],
+    "ean8": [types.GTIN8],
+    "ean13": [types.GTIN13],
+    "hex_color": [types.COLOR],
+    "rgb_color": [types.COLOR],
+    "color": [types.COLOR],
+    "company": [types.ORGANIZATION],
+    "credit_card_number": [types.CREDIT_CARD],
+    "currency_code": [types.PRICE_CURRENCY],
+    "money": [types.PRICE],
+    "rating": [types.RATING_VALUE],
+    "score": [types.QUANTITATIVE_VALUE],
+    "percent": [types.QUANTITATIVE_VALUE],
+    "flag": [types.BOOLEAN],
+    "status": [types.CATEGORICAL],
+    "priority": [types.CATEGORICAL],
+    "severity": [types.CATEGORICAL],
+    "size": [types.SIZE],
+    "height": [types.HEIGHT],
+    "weight": [types.WEIGHT],
+    "temperature": [types.QUANTITATIVE_VALUE],
+    "distance": [types.QUANTITATIVE_VALUE],
+    "speed": [types.QUANTITATIVE_VALUE],
+    "area": [types.QUANTITATIVE_VALUE],
+    "volume": [types.QUANTITATIVE_VALUE],
+    "pressure": [types.QUANTITATIVE_VALUE],
+    "energy": [types.QUANTITATIVE_VALUE],
+    "duration": [types.DURATION],
+    "age": [types.SUGGESTED_AGE],
+    "payment_method": [types.PAYMENT_METHOD],
+    "shipping_method": [types.DELIVERY_METHOD],
+    "platform": [
+        types.OPERATING_SYSTEM,
+        types.AVAILABLE_ON_DEVICE,
+        types.BROWSER_REQUIREMENTS,
+    ],
+    "locale": [types.IN_LANGUAGE, types.SCHEDULE_TIMEZONE],
+    "version": [types.VERSION],
+    "hash": [types.ID],
+    "email": [types.EMAIL],
+    "url": [types.URL],
+    "ipv4": [types.ID],
+    "ipv6": [types.ID],
+    "mac_address": [types.ID],
+    "job": [types.JOB_TITLE],
+    "name": [types.NAME],
+    "first_name": [types.GIVEN_NAME],
+    "last_name": [types.FAMILY_NAME],
+    "prefix": [types.HONORIFIC_PREFIX],
+    "phone_number": [types.TELEPHONE],
+    "ssn": [types.TAX_ID],
+    "file_extension": [types.ENCODING_FORMAT],
+    "file_name": [types.FILE_PATH, types.NAME],
+    "date_time": [types.DATE_TIME],
+    "iso8601": [types.DATE_TIME],
+    "unix_time": [types.DATE_TIME],
+    "year": [types.DATE],
+    "month_name": [types.DATE],
+    "month": [types.DATE],
+    "day_of_week": [types.DAY_OF_WEEK],
+    "day_of_month": [types.DATE],
+    "grade": [types.EDUCATIONAL_LEVEL],
 }
 
 
@@ -249,26 +336,54 @@ def process_column(
     semantic_types_dict = {}
     additional_meta = {}
     used_geo_prediction = False
+    classifier_meta = None
 
     # Use pre-computed geo_prediction if available and no manual override
-    if geo_prediction is not None and manual is None:
-        label = geo_prediction["label"]
-        if label in GEO_CLASSIFIER_SPATIAL_MAP:
+    if geo_prediction is not None:
+        label = geo_prediction.get("label")
+        if label:
+            classifier_meta = {
+                "label": label,
+                "confidence": geo_prediction.get("confidence", 0.0),
+                "source": geo_prediction.get("source", "ml"),
+            }
+            if geo_prediction.get("validated") is not None:
+                classifier_meta["validated"] = geo_prediction.get("validated")
+            if geo_prediction.get("filtered"):
+                classifier_meta["filtered"] = True
+            if geo_prediction.get("rejected"):
+                classifier_meta["rejected"] = True
+
+    if classifier_meta is not None and manual is None:
+        label = classifier_meta["label"]
+        if (
+            label in GEO_CLASSIFIER_SPATIAL_MAP
+            and not classifier_meta.get("filtered")
+            and not classifier_meta.get("rejected")
+        ):
             # Geo classifier identified a spatial type
             used_geo_prediction = True
             structural_type, semantic_list = GEO_CLASSIFIER_SPATIAL_MAP[label]
             semantic_types_dict = {st: None for st in semantic_list}
-            additional_meta["geo_classifier"] = {
-                "label": label,
-                "confidence": geo_prediction["confidence"],
-                "source": geo_prediction.get("source", "ml"),
-            }
+            additional_meta["geo_classifier"] = classifier_meta
 
     # If geo prediction wasn't used, use regular identify_types
     if not used_geo_prediction:
         structural_type, semantic_types_dict, additional_meta = identify_types(
             array, column_meta["name"], datamart_geo_data, manual
         )
+        if classifier_meta is not None and "geo_classifier" not in additional_meta:
+            additional_meta["geo_classifier"] = classifier_meta
+
+    if (
+        classifier_meta is not None
+        and not classifier_meta.get("filtered")
+        and not classifier_meta.get("rejected")
+    ):
+        label = classifier_meta.get("label")
+        if label in CLASSIFIER_SEMANTIC_MAP:
+            for sem_type in CLASSIFIER_SEMANTIC_MAP[label]:
+                semantic_types_dict.setdefault(sem_type, None)
 
     # Log column type with source information
     if used_geo_prediction:
@@ -279,6 +394,7 @@ def process_column(
 
         # Get sample values for logging (use stored samples if available)
         column_name = column_meta.get("name", "unknown")
+        samples_str = ""
         if geo_prediction and "sample_values" in geo_prediction:
             sample_values = geo_prediction["sample_values"]
             samples_str = ", ".join([str(v) for v in sample_values])
@@ -480,8 +596,8 @@ def process_dataset(
     :param data: path to dataset, or file object, or DataFrame
     :param geo_classifier: ``True`` to enable geo_classifier
     :param geo_classifier_threshold: Confidence threshold for geo_classifier
-        predictions (default: 0.85). Predictions below this threshold will be
-        treated as "non_spatial".
+        predictions (default: 0.85). Predictions below this threshold are
+        flagged as low-confidence and do not override heuristics.
     :param include_sample: Set to True to include a few random rows to the
         result. Useful to present to a user.
     :param coverage: Whether to compute data ranges
@@ -635,8 +751,13 @@ def process_dataset(
         for col_idx, prediction in geo_predictions.items():
             column_meta = columns[col_idx]
             prediction = geo_predictions[col_idx]
-            label = prediction.get("label", "non_spatial")
-            if label == "non_spatial":
+            label = prediction.get("label")
+            if (
+                not label
+                or label not in GEO_CLASSIFIER_SPATIAL_MAP
+                or prediction.get("filtered")
+                or prediction.get("rejected")
+            ):
                 continue
             col_name = column_meta["name"]
             geo_results.append(
