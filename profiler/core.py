@@ -19,8 +19,8 @@ from .spatial import (
     pair_latlong_columns,
     get_spatial_ranges,
     parse_wkt_column,
-    GeoClassifier,
-    HybridGeoClassifier,
+    CTAClassifier,
+    HybridCTAClassifier,
 )
 from .temporal import get_temporal_resolution
 from . import types
@@ -29,9 +29,9 @@ from . import types
 logger = logging.getLogger(__name__)
 
 
-# Mapping from GeoClassifier labels to (structural_type, [semantic_types])
+# Mapping from CTAClassifier labels to (structural_type, [semantic_types])
 # Only spatial types are included - other labels fall through to regular workflow
-GEO_CLASSIFIER_SPATIAL_MAP = {
+CTA_CLASSIFIER_SPATIAL_MAP = {
     # Lat/Long coordinates
     "latitude": (types.FLOAT, [types.LATITUDE]),
     "longitude": (types.FLOAT, [types.LONGITUDE]),
@@ -63,6 +63,9 @@ GEO_CLASSIFIER_SPATIAL_MAP = {
     "bbl": (types.INTEGER, [types.ID]),
     "bin": (types.INTEGER, [types.ID]),
 }
+
+# Backward compatibility alias.
+GEO_CLASSIFIER_SPATIAL_MAP = CTA_CLASSIFIER_SPATIAL_MAP
 
 CLASSIFIER_SEMANTIC_MAP = {
     # Spatial
@@ -284,7 +287,7 @@ def load_data(data, load_max_size=None, indexes=True):
     logger.info("DataFrame: %d rows, %d columns", data.shape[0], data.shape[1])
 
     # Compute stats on data before sampling (cheap operations)
-    # Also extract 3 non-null sample values for geo classifier
+    # Also extract 3 non-null sample values for CTA classifier
     for col in data.columns:
         # Count distinct values
         full_data_stats[col] = {"num_distinct_values": data[col].nunique()}
@@ -330,48 +333,68 @@ def process_column(
     coverage=True,
     datamart_geo_data=None,
     nominatim=None,
-    geo_prediction=None,  # Pre-computed from batch prediction
+    classifier_prediction=None,  # Pre-computed from batch prediction
 ):
     structural_type = None
     semantic_types_dict = {}
     additional_meta = {}
-    used_geo_prediction = False
+    used_classifier_prediction = False
     classifier_meta = None
 
-    # Use pre-computed geo_prediction if available and no manual override
-    if geo_prediction is not None:
-        label = geo_prediction.get("label")
+    # Use pre-computed classifier prediction if available and no manual override
+    if classifier_prediction is not None:
+        label = classifier_prediction.get("label") or classifier_prediction.get(
+            "l2_label"
+        )
         if label:
             classifier_meta = {
                 "label": label,
-                "confidence": geo_prediction.get("confidence", 0.0),
-                "source": geo_prediction.get("source", "ml"),
+                "confidence": classifier_prediction.get("confidence", 0.0),
+                "source": classifier_prediction.get("source", "ml"),
             }
-            if geo_prediction.get("validated") is not None:
-                classifier_meta["validated"] = geo_prediction.get("validated")
-            if geo_prediction.get("filtered"):
+            if classifier_prediction.get("l1_label"):
+                classifier_meta["l1_label"] = classifier_prediction.get("l1_label")
+            if classifier_prediction.get("l1_confidence") is not None:
+                classifier_meta["l1_confidence"] = classifier_prediction.get(
+                    "l1_confidence"
+                )
+            if classifier_prediction.get("l2_label"):
+                classifier_meta["l2_label"] = classifier_prediction.get("l2_label")
+            if classifier_prediction.get("l2_confidence") is not None:
+                classifier_meta["l2_confidence"] = classifier_prediction.get(
+                    "l2_confidence"
+                )
+            if classifier_prediction.get("datatype"):
+                classifier_meta["datatype"] = classifier_prediction.get("datatype")
+            if classifier_prediction.get("validated") is not None:
+                classifier_meta["validated"] = classifier_prediction.get("validated")
+            if classifier_prediction.get("filtered"):
                 classifier_meta["filtered"] = True
-            if geo_prediction.get("rejected"):
+            if classifier_prediction.get("rejected"):
                 classifier_meta["rejected"] = True
 
     if classifier_meta is not None and manual is None:
         label = classifier_meta["label"]
         if (
-            label in GEO_CLASSIFIER_SPATIAL_MAP
+            label in CTA_CLASSIFIER_SPATIAL_MAP
             and not classifier_meta.get("filtered")
             and not classifier_meta.get("rejected")
         ):
-            # Geo classifier identified a spatial type
-            used_geo_prediction = True
-            structural_type, semantic_list = GEO_CLASSIFIER_SPATIAL_MAP[label]
+            # Classifier identified a spatial type
+            used_classifier_prediction = True
+            structural_type, semantic_list = CTA_CLASSIFIER_SPATIAL_MAP[label]
             semantic_types_dict = {st: None for st in semantic_list}
+            additional_meta["cta_classifier"] = classifier_meta
             additional_meta["geo_classifier"] = classifier_meta
 
-    # If geo prediction wasn't used, use regular identify_types
-    if not used_geo_prediction:
+    # If classifier prediction wasn't used, use regular identify_types
+    if not used_classifier_prediction:
         structural_type, semantic_types_dict, additional_meta = identify_types(
             array, column_meta["name"], datamart_geo_data, manual
         )
+        if classifier_meta is not None:
+            if "cta_classifier" not in additional_meta:
+                additional_meta["cta_classifier"] = classifier_meta
         if classifier_meta is not None and "geo_classifier" not in additional_meta:
             additional_meta["geo_classifier"] = classifier_meta
 
@@ -404,21 +427,21 @@ def process_column(
             semantic_types_dict[types.DATE_TIME] = datetimes
 
     # Log column type with source information
-    if used_geo_prediction:
-        geo_info = additional_meta.get("geo_classifier", {})
-        label = geo_info.get("label", "unknown")
-        confidence = geo_info.get("confidence", 0.0)
-        source = geo_info.get("source", "ml")
+    if used_classifier_prediction:
+        classifier_info = additional_meta.get("cta_classifier", {})
+        label = classifier_info.get("label", "unknown")
+        confidence = classifier_info.get("confidence", 0.0)
+        source = classifier_info.get("source", "ml")
 
         # Get sample values for logging (use stored samples if available)
         column_name = column_meta.get("name", "unknown")
         samples_str = ""
-        if geo_prediction and "sample_values" in geo_prediction:
-            sample_values = geo_prediction["sample_values"]
+        if classifier_prediction and "sample_values" in classifier_prediction:
+            sample_values = classifier_prediction["sample_values"]
             samples_str = ", ".join([str(v) for v in sample_values])
 
         logger.info(
-            "Column type %s [%s] (from geo_classifier: column=%r, label=%s, confidence=%.4f, source=%s, samples=[%s])",
+            "Column type %s [%s] (from cta_classifier: column=%r, label=%s, confidence=%.4f, source=%s, samples=[%s])",
             structural_type,
             ", ".join(semantic_types_dict),
             column_name,
@@ -597,9 +620,9 @@ def process_column(
 
 def process_dataset(
     data,
-    geo_classifier=True,
-    geo_classifier_threshold=0.5,
-    geo_classifier_model_dir=None,
+    cta_classifier=True,
+    cta_classifier_threshold=0.5,
+    cta_classifier_model_dir=None,
     include_sample=False,
     coverage=True,
     plots=False,
@@ -613,12 +636,12 @@ def process_dataset(
     """Compute all metafeatures from a dataset.
 
     :param data: path to dataset, or file object, or DataFrame
-    :param geo_classifier: ``True`` to enable geo_classifier
-    :param geo_classifier_threshold: Confidence threshold for geo_classifier
-        predictions (default: 0.85). Predictions below this threshold are
+    :param cta_classifier: ``True`` to enable cta_classifier
+    :param cta_classifier_threshold: Confidence threshold for cta_classifier
+        predictions (default: 0.5). Predictions below this threshold are
         flagged as low-confidence and do not override heuristics.
-    :param geo_classifier_model_dir: Optional model directory to load CTA model
-        files from when geo_classifier is True.
+    :param cta_classifier_model_dir: Optional model directory to load CTA model
+        files from when cta_classifier is True.
     :param include_sample: Set to True to include a few random rows to the
         result. Useful to present to a user.
     :param coverage: Whether to compute data ranges
@@ -646,6 +669,24 @@ def process_dataset(
             DeprecationWarning,
         )
         load_max_size = kwargs.pop("sample_size")
+    if "geo_classifier" in kwargs:
+        warnings.warn(
+            "Argument 'geo_classifier' is deprecated, use 'cta_classifier'",
+            DeprecationWarning,
+        )
+        cta_classifier = kwargs.pop("geo_classifier")
+    if "geo_classifier_threshold" in kwargs:
+        warnings.warn(
+            "Argument 'geo_classifier_threshold' is deprecated, use 'cta_classifier_threshold'",
+            DeprecationWarning,
+        )
+        cta_classifier_threshold = kwargs.pop("geo_classifier_threshold")
+    if "geo_classifier_model_dir" in kwargs:
+        warnings.warn(
+            "Argument 'geo_classifier_model_dir' is deprecated, use 'cta_classifier_model_dir'",
+            DeprecationWarning,
+        )
+        cta_classifier_model_dir = kwargs.pop("geo_classifier_model_dir")
     if kwargs:
         raise TypeError(
             "process_dataset() got unexpected keyword argument %r" % next(iter(kwargs))
@@ -656,9 +697,9 @@ def process_dataset(
 
         datamart_geo_data = GeoData.from_local_cache()
 
-    if geo_classifier is True:
-        geo_classifier = HybridGeoClassifier(
-            GeoClassifier(model_dir=geo_classifier_model_dir)
+    if cta_classifier is True:
+        cta_classifier = HybridCTAClassifier(
+            CTAClassifier(model_dir=cta_classifier_model_dir)
         )
 
     if metadata is None:
@@ -733,11 +774,11 @@ def process_dataset(
     # STEP 2: Batch ML prediction for ALL columns (single forward pass!)
     # =========================================================================
     step_start = time.perf_counter()
-    logger.info("[STEP 2/6] Geo classifier batch prediction...")
+    logger.info("[STEP 2/6] CTA classifier batch prediction...")
 
-    geo_predictions = {}  # column_idx -> prediction dict
+    classifier_predictions = {}  # column_idx -> prediction dict
 
-    if geo_classifier:
+    if cta_classifier:
         # Collect samples from all columns (no manual override)
         # Use pre-extracted sample values from full dataset (before sampling)
         columns_for_batch = []
@@ -755,63 +796,65 @@ def process_dataset(
         # BATCH PREDICTION - single forward pass for ALL columns!
         if columns_for_batch:
             batch_inputs = [(name, vals) for _, name, vals in columns_for_batch]
-            batch_results = geo_classifier.predict_batch(
-                batch_inputs, threshold=geo_classifier_threshold
+            batch_results = cta_classifier.predict_batch(
+                batch_inputs, threshold=cta_classifier_threshold
             )
 
             for (column_idx, name, sample_values), prediction in zip(
                 columns_for_batch, batch_results
             ):
                 # Store prediction with sample values used
-                geo_predictions[column_idx] = prediction
-                geo_predictions[column_idx]["sample_values"] = sample_values
+                classifier_predictions[column_idx] = prediction
+                classifier_predictions[column_idx]["sample_values"] = sample_values
 
-    step_times["2_geo_batch_predict"] = time.perf_counter() - step_start
+    step_times["2_cta_batch_predict"] = time.perf_counter() - step_start
 
-    # Incrementally save geo attributes to CSV
-    if geo_predictions:
-        geo_results = []
-        for col_idx, prediction in geo_predictions.items():
+    # Incrementally save classifier attributes to CSV
+    if classifier_predictions:
+        cta_results = []
+        for col_idx, prediction in classifier_predictions.items():
             column_meta = columns[col_idx]
-            prediction = geo_predictions[col_idx]
+            prediction = classifier_predictions[col_idx]
             label = prediction.get("label")
             if (
                 not label
-                or label not in GEO_CLASSIFIER_SPATIAL_MAP
+                or label not in CTA_CLASSIFIER_SPATIAL_MAP
                 or prediction.get("filtered")
                 or prediction.get("rejected")
             ):
                 continue
             col_name = column_meta["name"]
-            geo_results.append(
+            cta_results.append(
                 {
                     "name": col_name,
                     "values": prediction["sample_values"],
                     "label": label,
+                    "l1_label": prediction.get("l1_label"),
+                    "datatype": prediction.get("datatype"),
                 }
             )
-        if geo_results:
-            geo_df = pandas.DataFrame(geo_results)
-            if os.path.exists("output/geo_classifier_results.csv"):
+        if cta_results:
+            cta_df = pandas.DataFrame(cta_results)
+            if os.path.exists("output/cta_classifier_results.csv"):
                 mode = "a"
                 header = False
             else:
                 os.makedirs("output", exist_ok=True)
                 mode = "w"
                 header = True
-            geo_df.to_csv(
-                "output/geo_classifier_results.csv",
+            cta_df.to_csv(
+                "output/cta_classifier_results.csv",
                 index=False,
                 mode=mode,
                 header=header,
             )
             logger.info(
-                "Saved %d geo classifier results to output/geo_classifier_results.csv",
-                len(geo_results),
+                "Saved %d CTA classifier results to output/cta_classifier_results.csv",
+                len(cta_results),
             )
 
         all_results = []
-        for col_idx, prediction in geo_predictions.items():
+        for col_idx, prediction in classifier_predictions.items():
             column_meta = columns[col_idx]
             label = prediction.get("label")
             if not label or prediction.get("filtered") or prediction.get("rejected"):
@@ -823,7 +866,12 @@ def process_dataset(
                     "name": column_meta["name"],
                     "values": prediction.get("sample_values", []),
                     "label": label,
+                    "l1_label": prediction.get("l1_label"),
+                    "l2_label": prediction.get("l2_label"),
+                    "datatype": prediction.get("datatype"),
                     "confidence": prediction.get("confidence"),
+                    "l1_confidence": prediction.get("l1_confidence"),
+                    "l2_confidence": prediction.get("l2_confidence"),
                     "source": prediction.get("source", "ml"),
                     "validated": prediction.get("validated"),
                 }
@@ -850,9 +898,9 @@ def process_dataset(
             )
 
     logger.info(
-        "[STEP 2/6] Geo batch prediction completed in %.3fs (%d columns)",
-        step_times["2_geo_batch_predict"],
-        len(geo_predictions),
+        "[STEP 2/6] CTA batch prediction completed in %.3fs (%d columns)",
+        step_times["2_cta_batch_predict"],
+        len(classifier_predictions),
     )
 
     # =========================================================================
@@ -870,7 +918,7 @@ def process_dataset(
             coverage=coverage,
             datamart_geo_data=datamart_geo_data,
             nominatim=nominatim,
-            geo_prediction=geo_predictions.get(col_idx),
+            classifier_prediction=classifier_predictions.get(col_idx),
         )
         resolved_columns[col_idx] = resolved
 

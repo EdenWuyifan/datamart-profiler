@@ -137,6 +137,8 @@ TWO_LEVEL_ONTOLOGY = {
         "birth_date", # [custom_classes] 1990-05-14
         "age_bucket", # [custom_classes] 18-24, 25-34, 35-44
         "gender", # [custom_classes] male, female, non_binary
+        "ethnicity", # [custom_classes] hispanic_or_latino, not_hispanic_or_latino, etc.
+        "race", # [custom_classes] white, black_or_african_american, asian, etc.
         "marital_status", # [custom_classes] single, married, divorced
         "education_level", # [custom_classes] high_school, bachelor, master
     ],

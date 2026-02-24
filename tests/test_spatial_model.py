@@ -15,7 +15,7 @@ class DummyResponse:
         yield self._payload
 
 
-def test_download_geo_model_writes_files(tmp_path, monkeypatch):
+def test_download_cta_model_writes_files(tmp_path, monkeypatch):
     files = {
         "model.pt": "https://example.com/model.pt",
         "config.json": "https://example.com/config.json",
@@ -32,20 +32,26 @@ def test_download_geo_model_writes_files(tmp_path, monkeypatch):
 
     monkeypatch.setattr(spatial.requests, "get", fake_get)
 
-    spatial.download_geo_model(str(tmp_path), files=files)
+    spatial.download_cta_model(str(tmp_path), files=files)
 
     for filename, url in files.items():
         assert (tmp_path / filename).read_bytes() == payloads[url]
 
 
-def test_geo_classifier_uses_cache_when_missing(monkeypatch, tmp_path):
+def test_cta_classifier_uses_cache_when_missing(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     expected_dir = tmp_path / "atlas_profiler" / "model"
 
     with pytest.raises(FileNotFoundError) as excinfo:
-        spatial.GeoClassifier(model_dir=None, auto_download=False)
+        spatial.CTAClassifier(model_dir=None, auto_download=False)
 
     assert str(expected_dir) in str(excinfo.value)
+
+
+def test_geo_aliases_point_to_cta_names():
+    assert spatial.GeoClassifier is spatial.CTAClassifier
+    assert spatial.HybridGeoClassifier is spatial.HybridCTAClassifier
+    assert spatial.download_geo_model is spatial.download_cta_model
 
 
 def test_pair_latlong_columns_matches_names():

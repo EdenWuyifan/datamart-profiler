@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import collections
 from dataclasses import dataclass
 import json
@@ -27,11 +29,14 @@ logger = logging.getLogger(__name__)
 
 
 # Model download configuration - individual file URLs from NYU Box
-GEO_MODEL_FILES = {
+CTA_MODEL_FILES = {
     "model.pt": "https://nyu.box.com/shared/static/2x0rnwhte4e8fbxkf0jyyd48cid232ci.pt",
     "config.json": "https://nyu.box.com/shared/static/eojx465mrfu1b5vasjkilt3rh9uvz19p.json",
     "label_encoder.json": "https://nyu.box.com/shared/static/hl347mei57rxe1flgap19j2lxst3xpa9.json",
 }
+
+# Backward compatibility alias.
+GEO_MODEL_FILES = CTA_MODEL_FILES
 
 
 N_RANGES = 3
@@ -665,6 +670,68 @@ def mean_pool(outputs, attention_mask):
     return (token_embeddings * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
 
 
+def build_family_gate(l1_classes, l2_classes, l2_to_l1):
+    """Build a boolean mask [num_l1, num_l2] for valid family->subtype pairs."""
+    l1_index = {label: idx for idx, label in enumerate(l1_classes)}
+    gate = torch.zeros((len(l1_classes), len(l2_classes)), dtype=torch.bool)
+    for l2_idx, l2_label in enumerate(l2_classes):
+        l1_label = l2_to_l1.get(l2_label)
+        if l1_label in l1_index:
+            gate[l1_index[l1_label], l2_idx] = True
+    return gate
+
+
+def build_default_l2_to_datatype(l2_labels):
+    """Default datatype policy used for CTA subtype labels."""
+    l2_to_datatype = {l2: "string" for l2 in l2_labels}
+
+    for label in ("data_time", "iso8601"):
+        if label in l2_to_datatype:
+            l2_to_datatype[label] = "datetime"
+
+    for label in ("date", "birth_date"):
+        if label in l2_to_datatype:
+            l2_to_datatype[label] = "date"
+
+    for label in (
+        "age",
+        "year",
+        "quarter",
+        "week_of_year",
+        "month_of_year",
+        "day_of_month",
+        "unix_time",
+        "ean8",
+        "ean13",
+        "primary_key",
+        "foreign_key",
+        "http_status_code",
+        "latency_ms",
+        "bytes_transferred",
+        "quantity",
+    ):
+        if label in l2_to_datatype:
+            l2_to_datatype[label] = "integer"
+
+    for label in (
+        "latitude",
+        "longitude",
+        "x_coord",
+        "y_coord",
+        "unit_price",
+        "discount_percent",
+        "tax_percent",
+    ):
+        if label in l2_to_datatype:
+            l2_to_datatype[label] = "float"
+
+    for label in ("boolean", "flag"):
+        if label in l2_to_datatype:
+            l2_to_datatype[label] = "boolean"
+
+    return l2_to_datatype
+
+
 class CTAClassificationModel(nn.Module):
     """Classification model with mean pooling (matches train_cta_classifier.py)."""
 
@@ -718,21 +785,45 @@ class CTAContrastiveModel(nn.Module):
         return self.forward(input_ids, attention_mask, return_embeddings=True)
 
 
-def download_geo_model(model_dir: str, files: dict = None) -> None:
+class CTAHierarchicalModel(nn.Module):
+    """Hierarchical model used by train_cta_classifier_hierarchical.py."""
+
+    def __init__(self, num_l1, num_l2, embed_dim=128, config=None):
+        super().__init__()
+        self.encoder = AutoModel.from_config(config)
+        hidden_size = self.encoder.config.hidden_size
+        self.projection = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, embed_dim),
+        )
+        self.family_head = nn.Linear(embed_dim, num_l1)
+        self.subtype_head = nn.Linear(embed_dim, num_l2)
+
+    def forward(self, input_ids, attention_mask):
+        outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
+        pooled = mean_pool(outputs, attention_mask)
+        embeddings = F.normalize(self.projection(pooled), dim=1)
+        family_logits = self.family_head(embeddings)
+        subtype_logits = self.subtype_head(embeddings)
+        return embeddings, family_logits, subtype_logits
+
+
+def download_cta_model(model_dir: str, files: dict = None) -> None:
     """
-    Download GeoClassifier model files from NYU Box.
+    Download CTA classifier model files from NYU Box.
 
     Args:
         model_dir: Directory to save the model files
-        files: Dict mapping filename to URL (default: GEO_MODEL_FILES)
+        files: Dict mapping filename to URL (default: CTA_MODEL_FILES)
     """
     if files is None:
-        files = GEO_MODEL_FILES
+        files = CTA_MODEL_FILES
 
     model_path = Path(model_dir)
     model_path.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"Downloading GeoClassifier model to {model_path}")
+    logger.info(f"Downloading CTA classifier model to {model_path}")
 
     for filename, url in files.items():
         file_path = model_path / filename
@@ -765,19 +856,19 @@ def download_geo_model(model_dir: str, files: dict = None) -> None:
     logger.info("Model download complete")
 
 
-class GeoClassifier:
+class CTAClassifier:
     """Unified interface for CTA classification with automatic model download."""
 
     def __init__(self, model_dir: str | None = None, auto_download: bool = True):
         """
-        Initialize the GeoClassifier.
+        Initialize the CTAClassifier.
 
         Args:
             model_dir: Path to the model directory (default: bundled model if present,
                 otherwise a user cache directory)
             auto_download: If True, automatically download model if not found
         """
-        required_files = list(GEO_MODEL_FILES.keys())
+        required_files = list(CTA_MODEL_FILES.keys())
         if model_dir is None:
             # Default to profiler/model relative to this module's location
             profiler_dir = Path(__file__).parent
@@ -796,7 +887,7 @@ class GeoClassifier:
         if missing_files:
             if auto_download:
                 logger.info(f"Model files missing: {missing_files}. Downloading...")
-                download_geo_model(str(self.model_dir))
+                download_cta_model(str(self.model_dir))
             else:
                 raise FileNotFoundError(
                     f"Model files not found in {self.model_dir}: {missing_files}. "
@@ -807,12 +898,18 @@ class GeoClassifier:
         with open(self.model_dir / "label_encoder.json") as f:
             config = json.load(f)
 
-        self.classes = config["classes"]
+        self.classes = [str(x) for x in config["classes"]]
         self.mode = config.get("mode", "classification")
         self.model_name = config.get("model_name", "BAAI/bge-small-en-v1.5")
         self.embed_dim = config.get("embed_dim", 128)
         self.name_repeat = config.get("name_repeat", 3)  # Name emphasis
         self.special_tokens = config.get("special_tokens", {})  # [COL], [VAL] tokens
+        self.model_kind = "classification"
+        self.l1_classes = []
+        self.l2_classes = []
+        self.l2_to_l1 = {}
+        self.l2_to_datatype = {}
+        self.family_gate = None
 
         # Device
         if torch.cuda.is_available():
@@ -839,12 +936,78 @@ class GeoClassifier:
         # Detect model type from checkpoint keys (prioritize checkpoint structure over mode)
         has_projection = any("projection" in k for k in checkpoint_keys)
         has_spatial_head = any("spatial_head" in k for k in checkpoint_keys)
+        has_family_head = any(
+            k.startswith("family_head.") for k in checkpoint_keys
+        )
+        has_subtype_head = any(
+            k.startswith("subtype_head.") for k in checkpoint_keys
+        )
+        has_hierarchical_heads = has_family_head and has_subtype_head
 
         # Determine which model to use based on checkpoint structure
-        # If checkpoint has projection head, use contrastive model
-        # Otherwise, use classification model (works for classification, fine_tune, combined modes)
-        if has_projection:
+        if has_hierarchical_heads:
+            self.model_kind = "hierarchical"
+            self.l2_classes = [
+                str(x) for x in config.get("l2_classes", self.classes)
+            ]
+            self.classes = self.l2_classes
+
+            raw_l2_to_l1 = config.get("l2_to_l1", {})
+            self.l2_to_l1 = {
+                str(k): str(v) for k, v in raw_l2_to_l1.items()
+            } if isinstance(raw_l2_to_l1, dict) else {}
+
+            self.l1_classes = [str(x) for x in config.get("l1_classes", [])]
+            if not self.l1_classes and self.l2_to_l1:
+                self.l1_classes = list(
+                    dict.fromkeys([self.l2_to_l1[l2] for l2 in self.l2_classes if l2 in self.l2_to_l1])
+                )
+
+            # Keep hierarchical inference robust even if metadata is partially missing.
+            if not self.l1_classes:
+                self.l1_classes = ["unknown"]
+            missing_l2 = [
+                l2 for l2 in self.l2_classes if l2 not in self.l2_to_l1
+            ]
+            if missing_l2:
+                fallback_l1 = self.l1_classes[0]
+                logger.warning(
+                    "Missing l2->l1 mapping for labels %s; falling back to l1=%s",
+                    missing_l2,
+                    fallback_l1,
+                )
+                for l2 in missing_l2:
+                    self.l2_to_l1[l2] = fallback_l1
+
+            self.family_gate = build_family_gate(
+                l1_classes=self.l1_classes,
+                l2_classes=self.l2_classes,
+                l2_to_l1=self.l2_to_l1,
+            )
+
+            self.l2_to_datatype = build_default_l2_to_datatype(self.l2_classes)
+            raw_l2_to_datatype = config.get("l2_to_datatype", {})
+            if isinstance(raw_l2_to_datatype, dict):
+                for k, v in raw_l2_to_datatype.items():
+                    k = str(k)
+                    if k in self.l2_to_datatype:
+                        self.l2_to_datatype[k] = str(v).lower()
+
+            self.model = CTAHierarchicalModel(
+                num_l1=len(self.l1_classes),
+                num_l2=len(self.l2_classes),
+                embed_dim=self.embed_dim,
+                config=encoder_config,
+            )
+            logger.info(
+                "Using CTAHierarchicalModel (mode=%s, l1=%d, l2=%d)",
+                self.mode,
+                len(self.l1_classes),
+                len(self.l2_classes),
+            )
+        elif has_projection:
             # Contrastive model (has projection head)
+            self.model_kind = "contrastive"
             self.model = CTAContrastiveModel(
                 embed_dim=self.embed_dim,
                 num_labels=len(self.classes),
@@ -858,6 +1021,7 @@ class GeoClassifier:
             # Classification model (no projection head)
             # This works for classification, fine_tune, and combined modes
             # since combined/fine_tune models are saved as classification models
+            self.model_kind = "classification"
             self.model = CTAClassificationModel(
                 num_labels=len(self.classes),
                 config=encoder_config,
@@ -944,44 +1108,73 @@ class GeoClassifier:
             attention_mask = encodings["attention_mask"].to(self.device)
 
             # SINGLE forward pass for ALL columns!
-            # Handle both model types
-            if isinstance(self.model, CTAClassificationModel):
+            if self.model_kind == "hierarchical":
+                _, family_logits, subtype_logits = self.model(
+                    input_ids=input_ids, attention_mask=attention_mask
+                )
+                family_probs = F.softmax(
+                    family_logits, dim=-1
+                )  # [batch_size, num_l1]
+                family_conf, family_idx = family_probs.max(
+                    dim=1
+                )  # [batch_size], [batch_size]
+
+                # Apply family->subtype gate before subtype argmax.
+                if self.family_gate is not None:
+                    allowed = self.family_gate.to(self.device)[family_idx]
+                    subtype_logits = subtype_logits.masked_fill(~allowed, -1e9)
+
+                subtype_probs = F.softmax(
+                    subtype_logits, dim=-1
+                )  # [batch_size, num_l2]
+                subtype_conf, subtype_idx = subtype_probs.max(dim=1)
+            elif isinstance(self.model, CTAClassificationModel):
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
                 logits = outputs.logits
+                probs = F.softmax(logits, dim=-1)  # [batch_size, num_classes]
             else:  # CTAContrastiveModel
                 logits = self.model(input_ids, attention_mask)
                 # If contrastive model doesn't have classifier, this won't work
                 # But based on training code, it should have classifier for inference
-
-            probs = F.softmax(logits, dim=-1)  # [batch_size, num_classes]
+                probs = F.softmax(logits, dim=-1)  # [batch_size, num_classes]
 
         # Process results for each column
         results = []
         for i in range(len(texts)):
-            top_prob, top_idx = probs[i].max(dim=0)
-            label = self.classes[top_idx.item()]
-            confidence = top_prob.item()
+            if self.model_kind == "hierarchical":
+                l1_idx = family_idx[i].item()
+                l2_idx = subtype_idx[i].item()
+                l1_label = self.l1_classes[l1_idx]
+                l2_label = self.l2_classes[l2_idx]
+                confidence = subtype_conf[i].item()
+                prediction = {
+                    "label": l2_label,  # backward compatibility
+                    "confidence": confidence,  # backward compatibility
+                    "l1_label": l1_label,
+                    "l1_confidence": family_conf[i].item(),
+                    "l2_label": l2_label,
+                    "l2_confidence": confidence,
+                    "datatype": self.l2_to_datatype.get(l2_label, "string"),
+                }
+            else:
+                top_prob, top_idx = probs[i].max(dim=0)
+                label = self.classes[top_idx.item()]
+                confidence = top_prob.item()
+                prediction = {
+                    "label": label,
+                    "confidence": confidence,
+                }
 
             if threshold is not None and confidence < threshold:
-                results.append(
-                    {
-                        "label": label,
-                        "confidence": confidence,
-                        "filtered": True,
-                    }
-                )
+                prediction["filtered"] = True
+                results.append(prediction)
             else:
-                results.append(
-                    {
-                        "label": label,
-                        "confidence": confidence,
-                    }
-                )
+                results.append(prediction)
 
         return results
 
 
-class HybridGeoClassifier:
+class HybridCTAClassifier:
     """
     Hybrid classifier: ML prediction first, then rule-based validation.
 
@@ -1035,7 +1228,7 @@ class HybridGeoClassifier:
         Initialize hybrid classifier.
 
         Args:
-            ml_classifier: GeoClassifier instance for ML predictions
+            ml_classifier: CTAClassifier instance for ML predictions
         """
         self.ml = ml_classifier
 
@@ -1294,10 +1487,11 @@ class HybridGeoClassifier:
         for (column_name, values), ml_pred in zip(columns_data, ml_results):
             label = ml_pred.get("label")
             confidence = ml_pred.get("confidence", 0.0)
+            base_result = dict(ml_pred)
 
             # If below threshold, keep prediction but mark as filtered
             if ml_pred.get("filtered"):
-                final_results.append(
+                base_result.update(
                     {
                         "label": label,
                         "confidence": confidence,
@@ -1305,6 +1499,7 @@ class HybridGeoClassifier:
                         "filtered": True,
                     }
                 )
+                final_results.append(base_result)
                 continue
 
             # Validate spatial types with rules
@@ -1312,7 +1507,7 @@ class HybridGeoClassifier:
                 is_valid = self._validate_prediction(label, column_name, values)
 
                 if is_valid:
-                    final_results.append(
+                    base_result.update(
                         {
                             "label": label,
                             "confidence": confidence,
@@ -1320,11 +1515,12 @@ class HybridGeoClassifier:
                             "validated": True,
                         }
                     )
+                    final_results.append(base_result)
                 else:
                     logger.debug(
-                        "HybridGeo batch: %s -> %s rejected", column_name, label
+                        "HybridCTA batch: %s -> %s rejected", column_name, label
                     )
-                    final_results.append(
+                    base_result.update(
                         {
                             "label": label,
                             "confidence": confidence,
@@ -1333,14 +1529,22 @@ class HybridGeoClassifier:
                             "rejected": True,
                         }
                     )
+                    final_results.append(base_result)
             else:
                 # No validation needed
-                final_results.append(
+                base_result.update(
                     {
                         "label": label,
                         "confidence": confidence,
                         "source": "ml",
                     }
                 )
+                final_results.append(base_result)
 
         return final_results
+
+
+# Backward compatibility aliases.
+download_geo_model = download_cta_model
+GeoClassifier = CTAClassifier
+HybridGeoClassifier = HybridCTAClassifier

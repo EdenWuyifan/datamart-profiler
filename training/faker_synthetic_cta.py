@@ -365,6 +365,23 @@ BRAND_NAMES = ["Acme", "Contoso", "Globex", "Northwind", "Initech", "Umbrella"]
 CATEGORY_NAMES = ["electronics", "apparel", "home_goods", "sports", "beauty", "office"]
 AVAILABILITY_STATUS_VALUES = ["in_stock", "out_of_stock", "backorder", "preorder", "discontinued"]
 GENDERS = ["male", "female", "non_binary", "other", "prefer_not_to_say"]
+ETHNICITY_VALUES = [
+    "hispanic_or_latino",
+    "not_hispanic_or_latino",
+    "unknown",
+    "prefer_not_to_say",
+]
+RACE_VALUES = [
+    "white",
+    "black_or_african_american",
+    "asian",
+    "american_indian_or_alaska_native",
+    "native_hawaiian_or_pacific_islander",
+    "other",
+    "two_or_more_races",
+    "unknown",
+    "prefer_not_to_say",
+]
 MARITAL_STATUS_VALUES = ["single", "married", "divorced", "widowed", "separated"]
 EDUCATION_LEVEL_VALUES = ["high_school", "associate", "bachelor", "master", "doctorate"]
 PAYMENT_METHOD_VALUES = ["card", "ach", "cash", "wire", "paypal", "apple_pay", "google_pay"]
@@ -833,6 +850,16 @@ TYPE_SPECS: dict[str, TypeSpec] = {
     ),
     "age_bucket": TypeSpec("custom", "age bucket values", generators=(_age_bucket_value,)),
     "gender": TypeSpec("custom", "gender values", generators=(lambda: _choice(GENDERS),)),
+    "ethnicity": TypeSpec(
+        "custom",
+        "ethnicity values",
+        generators=(lambda: _choice(ETHNICITY_VALUES),),
+    ),
+    "race": TypeSpec(
+        "custom",
+        "race values",
+        generators=(lambda: _choice(RACE_VALUES),),
+    ),
     "marital_status": TypeSpec(
         "custom",
         "marital status values",
@@ -1267,12 +1294,94 @@ def _iter_l2_labels_from(
             yield l1_label, l2_label
 
 
+def _parse_label_args(raw_args: list[str] | None) -> list[str]:
+    if not raw_args:
+        return []
+    labels: list[str] = []
+    for raw in raw_args:
+        for token in str(raw).split(","):
+            label = token.strip()
+            if label:
+                labels.append(label)
+    # Deduplicate while preserving order.
+    return list(dict.fromkeys(labels))
+
+
+def _select_l2_pairs(
+    l2_to_l1: dict[str, str],
+    include_l2: list[str] | None = None,
+    include_l1: list[str] | None = None,
+    exclude_l2: list[str] | None = None,
+    resume_from_l2: str | None = None,
+) -> list[tuple[str, str]]:
+    include_l2 = _parse_label_args(include_l2)
+    include_l1 = _parse_label_args(include_l1)
+    exclude_l2 = _parse_label_args(exclude_l2)
+
+    unknown_l2 = sorted(set(include_l2) - set(l2_to_l1))
+    if unknown_l2:
+        raise ValueError(
+            f"Unknown --include-l2 labels: {unknown_l2}. "
+            f"Valid labels: {sorted(l2_to_l1)}"
+        )
+
+    unknown_excluded = sorted(set(exclude_l2) - set(l2_to_l1))
+    if unknown_excluded:
+        raise ValueError(
+            f"Unknown --exclude-l2 labels: {unknown_excluded}. "
+            f"Valid labels: {sorted(l2_to_l1)}"
+        )
+
+    unknown_l1 = sorted(set(include_l1) - set(TWO_LEVEL_ONTOLOGY))
+    if unknown_l1:
+        raise ValueError(
+            f"Unknown --include-l1 labels: {unknown_l1}. "
+            f"Valid labels: {sorted(TWO_LEVEL_ONTOLOGY)}"
+        )
+
+    has_include_filter = bool(include_l2 or include_l1)
+    selected_l2: set[str] = set()
+    if has_include_filter:
+        selected_l2.update(include_l2)
+        for l1_label in include_l1:
+            selected_l2.update(TWO_LEVEL_ONTOLOGY[l1_label])
+    else:
+        selected_l2 = set(l2_to_l1)
+
+    for label in exclude_l2:
+        selected_l2.discard(label)
+
+    if not selected_l2:
+        raise ValueError("No l2 labels selected after include/exclude filtering.")
+
+    selected_pairs = []
+    for l1_label, l2_labels in TWO_LEVEL_ONTOLOGY.items():
+        for l2_label in l2_labels:
+            if l2_label in selected_l2:
+                selected_pairs.append((l1_label, l2_label))
+
+    if resume_from_l2 is not None:
+        selected_l2_list = [l2 for _, l2 in selected_pairs]
+        if resume_from_l2 not in selected_l2_list:
+            raise ValueError(
+                f"--resume-from-l2 '{resume_from_l2}' is not in the selected labels. "
+                f"Selected labels: {selected_l2_list}"
+            )
+        resume_idx = selected_l2_list.index(resume_from_l2)
+        selected_pairs = selected_pairs[resume_idx:]
+
+    return selected_pairs
+
+
 def generate_synthetic_checkpoint(
     output_path: str = "synthetic_df_checkpoint.csv",
     num_synthetic_per_class: int = 200,
     num_of_values_per_class: int = 3,
     batch_size: int = 10,
     resume_from_l2: str | None = None,
+    include_l2: list[str] | None = None,
+    include_l1: list[str] | None = None,
+    exclude_l2: list[str] | None = None,
 ) -> None:
     if num_synthetic_per_class < 1:
         raise ValueError("num_synthetic_per_class must be >= 1")
@@ -1300,10 +1409,30 @@ def generate_synthetic_checkpoint(
         output_columns=output_columns,
     )
 
-    for l1_label, l2_label in _iter_l2_labels_from(resume_from_l2=resume_from_l2):
+    selected_pairs = _select_l2_pairs(
+        l2_to_l1=l2_to_l1,
+        include_l2=include_l2,
+        include_l1=include_l1,
+        exclude_l2=exclude_l2,
+        resume_from_l2=resume_from_l2,
+    )
+    selected_pairs = [
+        (l1_label, l2_label)
+        for l1_label, l2_label in selected_pairs
+        if TYPE_SPECS[l2_label].kind != "curated+synthetic"
+    ]
+    if not selected_pairs:
+        raise ValueError(
+            "No eligible l2 labels selected for faker/mimesis generation. "
+            "All selected labels are curated+synthetic."
+        )
+    print(
+        f"Selected {len(selected_pairs)} l2 labels for generation: "
+        f"{[l2 for _, l2 in selected_pairs]}"
+    )
+
+    for l1_label, l2_label in selected_pairs:
         spec = TYPE_SPECS[l2_label]
-        if spec.kind == "curated+synthetic":
-            continue
 
         print(f"- `{l2_label}` ({l1_label}) - {spec.description} [{spec.kind}]")
         for name_batch in iter_synthetic_name_batches(
@@ -1371,6 +1500,33 @@ def parse_args() -> argparse.Namespace:
         default=10,
         help="LLM name generation batch size.",
     )
+    parser.add_argument(
+        "--include-l2",
+        action="append",
+        default=[],
+        help=(
+            "Include only these l2 labels. Can be passed multiple times and/or "
+            "as comma-separated values. Example: --include-l2 zip5,zip9 --include-l2 email"
+        ),
+    )
+    parser.add_argument(
+        "--include-l1",
+        action="append",
+        default=[],
+        help=(
+            "Include all l2 labels under these l1 families. Can be passed multiple "
+            "times and/or as comma-separated values. Example: --include-l1 spatial,temporal"
+        ),
+    )
+    parser.add_argument(
+        "--exclude-l2",
+        action="append",
+        default=[],
+        help=(
+            "Exclude specific l2 labels after include filtering. Can be passed "
+            "multiple times and/or as comma-separated values."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1382,6 +1538,9 @@ def main() -> None:
         num_of_values_per_class=args.num_values_per_class,
         batch_size=args.batch_size,
         resume_from_l2=args.resume_from_l2,
+        include_l2=args.include_l2,
+        include_l1=args.include_l1,
+        exclude_l2=args.exclude_l2,
     )
 
 

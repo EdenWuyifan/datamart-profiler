@@ -66,9 +66,9 @@ Key parameters for `process_dataset`:
 ```python
 metadata = process_dataset(
     data,
-    geo_classifier=True,
-    geo_classifier_threshold=0.5,
-    geo_classifier_model_dir=None,
+    cta_classifier=True,
+    cta_classifier_threshold=0.5,
+    cta_classifier_model_dir=None,
     include_sample=False,
     coverage=True,
     plots=False,
@@ -80,9 +80,9 @@ metadata = process_dataset(
 ```
 
 - `data`: Path to a dataset, a file-like object, or a pandas DataFrame.
-- `geo_classifier`: `True` to enable the default ML classifier, or pass a classifier instance.
-- `geo_classifier_threshold`: Confidence cutoff for classifier predictions; below this is flagged low-confidence and does not override heuristics.
-- `geo_classifier_model_dir`: Optional model directory path for CTA model files (used when `geo_classifier=True`).
+- `cta_classifier`: `True` to enable the default ML classifier, or pass a classifier instance.
+- `cta_classifier_threshold`: Confidence cutoff for classifier predictions; below this is flagged low-confidence and does not override heuristics.
+- `cta_classifier_model_dir`: Optional model directory path for CTA model files (used when `cta_classifier=True`).
 - `include_sample`: `True` to include a small random CSV sample in the output metadata.
 - `coverage`: Compute data ranges (spatial/temporal coverage) when `True`.
 - `plots`: Include plots in the output metadata when `True`.
@@ -472,13 +472,13 @@ The original `identify_types()` function used **regex patterns and heuristics**:
 - ❌ Missed WKT polygons and multi-polygons
 - ❌ Sequential column processing (slow for large datasets)
 
-### Enhanced Workflow (With Geo Classifier)
+### Enhanced Workflow (With CTA Classifier)
 
-The geo classifier adds a **batch ML prediction phase** before column processing:
+The CTA classifier adds a **batch ML prediction phase** before column processing:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  process_dataset(data, geo_classifier=HybridGeoClassifier)                   │
+│  process_dataset(data, cta_classifier=HybridCTAClassifier)                   │
 │                                                                              │
 │  ┌──────────────────┐                                                        │
 │  │ 1. LOAD DATA     │  (unchanged)                                           │
@@ -488,7 +488,7 @@ The geo classifier adds a **batch ML prediction phase** before column processing
 │  ┌──────────────────┐                                                        │
 │  │ 2. BATCH ML      │  ★ NEW: Single forward pass for ALL columns            │
 │  │    PREDICTION    │                                                        │
-│  │                  │  geo_classifier.predict_batch([                        │
+│  │                  │  cta_classifier.predict_batch([                        │
 │  │                  │      (col_name, sample_values),                        │
 │  │                  │      ...                                               │
 │  │                  │  ])                                                    │
@@ -505,9 +505,9 @@ The geo classifier adds a **batch ML prediction phase** before column processing
 │  ┌──────────────────┐                                                        │
 │  │ 3. PROCESS COLS  │  ★ NOW PARALLEL (ThreadPoolExecutor)                   │
 │  │    (parallel)    │                                                        │
-│  │                  │  process_column(..., geo_prediction=pred)              │
+│  │                  │  process_column(..., classifier_prediction=pred)       │
 │  │                  │    │                                                   │
-│  │                  │    ├─► If geo_prediction exists & spatial type:        │
+│  │                  │    ├─► If classifier_prediction exists & spatial type: │
 │  │                  │    │     Use ML result directly (skip identify_types)  │
 │  │                  │    │                                                   │
 │  │                  │    └─► Else: Fall back to identify_types()             │
@@ -521,12 +521,12 @@ The geo classifier adds a **batch ML prediction phase** before column processing
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Type Mapping (`GEO_CLASSIFIER_SPATIAL_MAP`)
+### Type Mapping (`CTA_CLASSIFIER_SPATIAL_MAP`)
 
-The geo classifier maps ML labels to Auctus type system:
+The CTA classifier maps ML labels to Auctus type system:
 
 ```python
-GEO_CLASSIFIER_SPATIAL_MAP = {
+CTA_CLASSIFIER_SPATIAL_MAP = {
     # Coordinates
     "latitude":      (types.FLOAT, [types.LATITUDE]),
     "longitude":     (types.FLOAT, [types.LONGITUDE]),
@@ -556,7 +556,7 @@ GEO_CLASSIFIER_SPATIAL_MAP = {
 
 ### Performance Improvements
 
-| Aspect            | Original                    | With Geo Classifier                          |
+| Aspect            | Original                    | With CTA Classifier                          |
 | ----------------- | --------------------------- | -------------------------------------------- |
 | Type detection    | Sequential regex per column | **Single batch forward pass**                |
 | Column processing | Sequential                  | **Parallel (ThreadPoolExecutor)**            |
@@ -567,32 +567,32 @@ GEO_CLASSIFIER_SPATIAL_MAP = {
 
 ```python
 from profiler import process_dataset
-from profiler.spatial import GeoClassifier, HybridGeoClassifier
+from profiler.spatial import CTAClassifier, HybridCTAClassifier
 
 # Initialize classifier (auto-downloads model from NYU Box)
-geo_clf = HybridGeoClassifier(GeoClassifier())
+cta_clf = HybridCTAClassifier(CTAClassifier())
 
-# Profile dataset with geo classifier
+# Profile dataset with CTA classifier
 metadata = process_dataset(
     "data.csv",
-    geo_classifier=geo_clf,  # Enable ML-based type detection
+    cta_classifier=cta_clf,  # Enable ML-based type detection
     coverage=True,
     plots=True,
 )
 
-# Results include geo_classifier metadata
+# Results include cta_classifier metadata
 for col in metadata["columns"]:
-    if "geo_classifier" in col:
-        print(f"{col['name']}: {col['geo_classifier']}")
+    if "cta_classifier" in col:
+        print(f"{col['name']}: {col['cta_classifier']}")
         # {'label': 'latitude', 'confidence': 0.97, 'source': 'ml+validated'}
 ```
 
 ### Model Auto-Download
 
-The `GeoClassifier` automatically downloads model files from NYU Box on first use:
+The `CTAClassifier` automatically downloads model files from NYU Box on first use:
 
 ```python
-GEO_MODEL_FILES = {
+CTA_MODEL_FILES = {
     "model.pt":           "https://nyu.box.com/shared/static/...",
     "config.json":        "https://nyu.box.com/shared/static/...",
     "label_encoder.json": "https://nyu.box.com/shared/static/...",
