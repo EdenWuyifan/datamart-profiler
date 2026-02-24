@@ -35,7 +35,11 @@ TWO_LEVEL_ONTOLOGY = {
         "data_time", # [faker] 1996-04-24 02:32:59
         "iso8601", # [faker] 1971-07-17T01:53:59
         "unix_time", # [faker] 17739602
+        "date", # [custom_classes] 2026-02-23
+        "time", # [custom_classes] 13:45:22
         "year", # [faker] 1975, 2024, etc.
+        "quarter", # [custom_classes] 1, 2, 3, 4
+        "week_of_year", # [custom_classes] 1-53
         "month_name", # [faker] January, February, ...
         "month_of_year", # [faker (month)] 1, 01, etc.
         "day_of_month", # [faker] 1-31, 01-31
@@ -56,6 +60,8 @@ TWO_LEVEL_ONTOLOGY = {
     "financial_commerce": [
         "money", # [custom_classes] $1,234.56, €1.234,56, etc.
         "currency_code", # [faker] USD, EUR, etc.
+        "payment_method", # [custom_classes] card, ach, cash, wire, etc.
+        "amount_range", # [custom_classes] 0-50, 50-100, etc.
         "credit_card_number", # [faker] 4111 1111 1111 1111, etc.
         "credit_card_security_code", # [faker] 123, 456, etc.
         "credit_card_expire", # [faker] 12/24, 01/25, etc.
@@ -75,6 +81,64 @@ TWO_LEVEL_ONTOLOGY = {
         "uuid", # [custom_classes] 123e4567-e89b-12d3-a456-426614174000
         "ean8", # [faker] 12345670
         "ean13", # [faker] 1234567890128
+        "alphanumeric_code", # [custom_classes] AB12CD34, X9Q7Z2
+        "checksum_code", # [custom_classes] ID-12345-7
+    ],
+    "entity_identifier": [
+        "primary_key", # [custom_classes] 1001, 1002, ...
+        "foreign_key", # [custom_classes] 42, 77, ...
+        "user_id", # [custom_classes] USR-000123
+        "customer_id", # [custom_classes] CUST-000123
+        "account_id", # [custom_classes] ACC-000123
+        "order_id", # [custom_classes] ORD-000123
+        "transaction_id", # [custom_classes] TXN-00012345
+        "session_id", # [custom_classes] SES-9F2A7C1D
+        "device_id", # [custom_classes] DEV-A1B2C3D4
+        "request_id", # [custom_classes] REQ-20260223-000001
+        "trace_id", # [custom_classes] TRACE-8F4B2A1C
+        "sku", # [custom_classes] SKU-AB12-340
+        "upc12", # [custom_classes] 036000291452
+        "invoice_id", # [custom_classes] INV-2026-000123
+    ],
+    "business_process": [
+        "status", # [custom_classes] active, pending, closed
+        "lifecycle_stage", # [custom_classes] lead, active, churned
+        "priority", # [custom_classes] low, medium, high, critical
+        "channel", # [custom_classes] web, app, store, phone
+        "source_system", # [custom_classes] salesforce, netsuite, sap
+        "payment_status", # [custom_classes] paid, pending, failed
+        "order_status", # [custom_classes] created, shipped, delivered
+        "shipment_status", # [custom_classes] in_transit, delivered
+        "return_status", # [custom_classes] requested, approved, refunded
+        "fulfillment_status", # [custom_classes] picking, packed, shipped
+    ],
+    "web_telemetry": [
+        "http_method", # [custom_classes] GET, POST, PUT, DELETE
+        "http_status_code", # [custom_classes] 200, 404, 500
+        "endpoint_path", # [custom_classes] /api/v1/orders/123
+        "referrer_url", # [custom_classes] https://example.com/search?q=shoes
+        "user_agent", # [custom_classes] Mozilla/5.0 ...
+        "hostname", # [custom_classes] api.example.com
+        "domain_name", # [custom_classes] example.com
+        "latency_ms", # [custom_classes] 25, 120, 950
+        "bytes_transferred", # [custom_classes] 512, 2048, 65536
+    ],
+    "catalog_inventory": [
+        "product_name", # [custom_classes] Wireless Mouse
+        "brand_name", # [custom_classes] Acme, Contoso
+        "category_name", # [custom_classes] electronics, apparel
+        "quantity", # [custom_classes] 0, 5, 120
+        "unit_price", # [custom_classes] 19.99, 49.50
+        "discount_percent", # [custom_classes] 5.0, 10.0, 25.5
+        "tax_percent", # [custom_classes] 0.0, 6.5, 8.875
+        "availability_status", # [custom_classes] in_stock, out_of_stock
+    ],
+    "demographic": [
+        "birth_date", # [custom_classes] 1990-05-14
+        "age_bucket", # [custom_classes] 18-24, 25-34, 35-44
+        "gender", # [custom_classes] male, female, non_binary
+        "marital_status", # [custom_classes] single, married, divorced
+        "education_level", # [custom_classes] high_school, bachelor, master
     ],
     "color": [
         "color_name", # [faker] red, blue, green, etc.
