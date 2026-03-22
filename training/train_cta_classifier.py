@@ -32,6 +32,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import DataLoader, Dataset
@@ -100,12 +101,27 @@ def load_encoder_weights(model, checkpoint_path, strict=False):
 def create_optimizer(model, lr, encoder_lr=None, freeze_encoder=False):
     """Create optimizer with optional differential learning rates."""
     if freeze_encoder:
-        return torch.optim.AdamW(model.classifier.parameters(), lr=lr)
+        non_encoder_params = [
+            p
+            for name, p in model.named_parameters()
+            if p.requires_grad and not name.startswith("encoder.")
+        ]
+        return torch.optim.AdamW(non_encoder_params, lr=lr)
     elif encoder_lr is not None and encoder_lr != lr:
+        encoder_params = [
+            p
+            for name, p in model.named_parameters()
+            if p.requires_grad and name.startswith("encoder.")
+        ]
+        non_encoder_params = [
+            p
+            for name, p in model.named_parameters()
+            if p.requires_grad and not name.startswith("encoder.")
+        ]
         return torch.optim.AdamW(
             [
-                {"params": model.encoder.parameters(), "lr": encoder_lr},
-                {"params": model.classifier.parameters(), "lr": lr},
+                {"params": encoder_params, "lr": encoder_lr},
+                {"params": non_encoder_params, "lr": lr},
             ]
         )
     return torch.optim.AdamW(model.parameters(), lr=lr)
@@ -172,7 +188,9 @@ def mine_hard_negatives_cosine(embeddings, labels, topk=50, hard_k=20):
 # ============================================================================
 
 
-def load_training_data(synthetic_path="synthetic_df.csv", name_repeat=3):
+def load_training_data(
+    synthetic_path="synthetic_df.csv", name_repeat=3, name_dropout_prob=0.0
+):
     """Load and format synthetic training data."""
     if not Path(synthetic_path).exists():
         raise FileNotFoundError(
@@ -185,17 +203,20 @@ def load_training_data(synthetic_path="synthetic_df.csv", name_repeat=3):
     def make_text(row):
         col_tok, val_tok = SPECIAL_TOKENS["col_token"], SPECIAL_TOKENS["val_token"]
         name = row["name"]
+        use_name = bool(name) and random.random() >= name_dropout_prob
         col_parts = (
             " ".join([f"{col_tok} {name}"] * name_repeat)
-            if name_repeat > 1 and name
-            else (f"{col_tok} {name}" if name else "")
+            if name_repeat > 1 and use_name
+            else (f"{col_tok} {name}" if use_name else "")
         )
         val_list = [v.strip() for v in str(row["values"]).split(",")]
         val_parts = " ".join([f"{val_tok} {v}" for v in val_list[:10]])
         return f"{col_parts} {val_parts}".strip()
 
     df["text"] = df.apply(make_text, axis=1)
-    print(f"Total training samples: {len(df)} (name_repeat={name_repeat})")
+    print(
+        f"Total training samples: {len(df)} (name_repeat={name_repeat}, name_dropout_prob={name_dropout_prob})"
+    )
     return df
 
 
@@ -278,8 +299,16 @@ class TripletContrastiveDataset(Dataset):
         for i, y in enumerate(self.labels):
             self.label_to_indices.setdefault(int(y), []).append(i)
 
+        self.valid_anchor_indices = [
+            i for i, y in enumerate(self.labels) if len(self.label_to_indices[int(y)]) > 1
+        ]
+        if not self.valid_anchor_indices:
+            raise ValueError(
+                "TripletContrastiveDataset requires at least one class with >=2 samples."
+            )
+
     def __len__(self):
-        return len(self.texts)
+        return len(self.valid_anchor_indices)
 
     def _encode(self, text):
         enc = self.tokenizer(
@@ -291,6 +320,7 @@ class TripletContrastiveDataset(Dataset):
         return torch.tensor(enc["input_ids"]), torch.tensor(enc["attention_mask"])
 
     def __getitem__(self, idx):
+        idx = self.valid_anchor_indices[idx]
         y = int(self.labels[idx])
 
         # positive
@@ -351,12 +381,22 @@ class CTAClassificationModel(nn.Module):
     """Classification model with optional spatial head."""
 
     def __init__(
-        self, num_labels, model_name=None, config=None, use_spatial_head=False
+        self,
+        num_labels,
+        model_name=None,
+        config=None,
+        use_spatial_head=False,
+        metric_embed_dim=256,
     ):
         super().__init__()
         self.encoder = BaseEncoder(model_name, config).encoder
         hidden_size = self.encoder.config.hidden_size
         self.classifier = nn.Linear(hidden_size, num_labels)
+        self.metric_projection = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, metric_embed_dim),
+        )
         self.use_spatial_head = use_spatial_head
         if use_spatial_head:
             self.spatial_head = nn.Linear(hidden_size, 2)
@@ -393,6 +433,14 @@ class CTAClassificationModel(nn.Module):
         for param in self.encoder.parameters():
             param.requires_grad = False
         print("Encoder frozen - only classifier will be trained")
+
+    def unfreeze_encoder(self):
+        for param in self.encoder.parameters():
+            param.requires_grad = True
+        print("Encoder unfrozen - full model will be trained")
+
+    def get_metric_embeddings(self, pooled):
+        return F.normalize(self.metric_projection(pooled), dim=1)
 
 
 class CTAContrastiveModel(nn.Module):
@@ -463,7 +511,7 @@ class SupConLoss(nn.Module):
 
 
 class CombinedLoss(nn.Module):
-    """Combined contrastive + classification loss."""
+    """Cross-entropy with optional supervised-contrastive regularization."""
 
     def __init__(self, temperature=0.07, alpha=0.5):
         super().__init__()
@@ -471,10 +519,18 @@ class CombinedLoss(nn.Module):
         self.ce = nn.CrossEntropyLoss()
         self.alpha = alpha
 
-    def forward(self, embeddings, logits, labels):
+    def forward(self, embeddings, logits, labels, label_smoothing=0.0):
+        if label_smoothing > 0:
+            loss_ce = F.cross_entropy(logits, labels, label_smoothing=label_smoothing)
+        else:
+            loss_ce = self.ce(logits, labels)
+
+        if self.alpha <= 0:
+            zero = torch.zeros((), dtype=loss_ce.dtype, device=loss_ce.device)
+            return loss_ce, zero, loss_ce
+
         loss_con = self.supcon(embeddings, labels)
-        loss_ce = self.ce(logits, labels)
-        return self.alpha * loss_con + (1 - self.alpha) * loss_ce, loss_con, loss_ce
+        return loss_ce + self.alpha * loss_con, loss_con, loss_ce
 
 
 # ============================================================================
@@ -483,12 +539,21 @@ class CombinedLoss(nn.Module):
 
 
 def train_epoch(
-    model, loader, device, optimizer=None, scheduler=None, criterion=None, mode="train"
+    model,
+    loader,
+    device,
+    optimizer=None,
+    scheduler=None,
+    criterion=None,
+    mode="train",
+    return_predictions=False,
 ):
     is_train = mode == "train"
     model.train() if is_train else model.eval()
 
     total_loss, correct, total = 0, 0, 0
+    all_true = []
+    all_pred = []
     pbar = tqdm(loader, desc=f"[{mode.capitalize()}]")
 
     with torch.set_grad_enabled(is_train):
@@ -510,16 +575,21 @@ def train_epoch(
 
             labels = batch["labels"].to(device)
             logits = outputs.logits
-
-            ce = F.cross_entropy(
-                logits, labels, label_smoothing=getattr(model, "label_smoothing", 0.0)
+            if criterion is None:
+                criterion = CombinedLoss(
+                    temperature=0.07, alpha=getattr(model, "metric_alpha", 0.0)
+                )
+            feats = (
+                model.get_metric_embeddings(outputs.pooled)
+                if hasattr(model, "get_metric_embeddings")
+                else F.normalize(outputs.pooled, dim=1)
             )
-
-            loss = ce
-            if getattr(model, "metric_alpha", 0.0) > 0:
-                feats = F.normalize(outputs.pooled, dim=1)
-                loss_con = SupConLoss(temperature=0.07)(feats, labels)
-                loss = ce + model.metric_alpha * loss_con
+            loss, _, _ = criterion(
+                feats,
+                logits,
+                labels,
+                label_smoothing=getattr(model, "label_smoothing", 0.0),
+            )
 
             if is_train:
                 loss.backward()
@@ -532,6 +602,9 @@ def train_epoch(
                 preds = outputs.logits.argmax(dim=-1)
                 correct += (preds == batch["labels"].to(device)).sum().item()
                 total += len(batch["labels"])
+                if return_predictions:
+                    all_true.extend(batch["labels"].cpu().tolist())
+                    all_pred.extend(preds.cpu().tolist())
 
             total_loss += loss.item()
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
@@ -539,6 +612,8 @@ def train_epoch(
     avg_loss = total_loss / len(loader)
     if is_train:
         return avg_loss
+    if return_predictions:
+        return avg_loss, (correct / total if total > 0 else 0.0), all_true, all_pred
     return avg_loss, (correct / total if total > 0 else 0.0)
 
 
@@ -551,30 +626,78 @@ def train_classification(
     lr,
     encoder_lr=None,
     freeze_encoder=False,
+    freeze_warmup_epochs=0,
+    class_names=None,
+    supcon_temperature=0.07,
     output_dir="./model",
 ):
     """Classification training (Stage 2: fine-tuning)."""
     model.to(device)
-    if freeze_encoder:
-        model.freeze_encoder()
 
-    optimizer = create_optimizer(model, lr, encoder_lr, freeze_encoder)
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=int(0.1 * len(train_loader) * epochs),
-        num_training_steps=len(train_loader) * epochs,
+    current_freeze = freeze_encoder or freeze_warmup_epochs > 0
+    if current_freeze:
+        model.freeze_encoder()
+    else:
+        model.unfreeze_encoder()
+
+    criterion = CombinedLoss(
+        temperature=supcon_temperature, alpha=getattr(model, "metric_alpha", 0.0)
     )
+
+    def _build_optimizer_and_scheduler(remaining_epochs, freeze_flag):
+        opt = create_optimizer(model, lr, encoder_lr, freeze_flag)
+        sched = get_linear_schedule_with_warmup(
+            opt,
+            num_warmup_steps=int(0.1 * len(train_loader) * remaining_epochs),
+            num_training_steps=max(1, len(train_loader) * remaining_epochs),
+        )
+        return opt, sched
+
+    optimizer, scheduler = _build_optimizer_and_scheduler(epochs, current_freeze)
 
     best_val_acc = 0
     for epoch in range(epochs):
+        if (
+            freeze_warmup_epochs > 0
+            and not freeze_encoder
+            and epoch == freeze_warmup_epochs
+        ):
+            model.unfreeze_encoder()
+            current_freeze = False
+            remaining_epochs = epochs - epoch
+            optimizer, scheduler = _build_optimizer_and_scheduler(
+                remaining_epochs, current_freeze
+            )
+
         train_loss = train_epoch(
-            model, train_loader, device, optimizer, scheduler, mode="train"
+            model,
+            train_loader,
+            device,
+            optimizer,
+            scheduler,
+            criterion=criterion,
+            mode="train",
         )
-        val_loss, val_acc = train_epoch(model, val_loader, device, mode="val")
+        val_loss, val_acc, y_true, y_pred = train_epoch(
+            model,
+            val_loader,
+            device,
+            criterion=criterion,
+            mode="val",
+            return_predictions=True,
+        )
 
         print(
             f"Epoch {epoch+1}/{epochs}: Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}, Val Acc={val_acc:.4f}"
         )
+        print("Validation confusion matrix:")
+        print(confusion_matrix(y_true, y_pred))
+        print("Validation classification report:")
+        report_kwargs = {"digits": 4, "zero_division": 0}
+        if class_names is not None:
+            report_kwargs["labels"] = list(range(len(class_names)))
+            report_kwargs["target_names"] = class_names
+        print(classification_report(y_true, y_pred, **report_kwargs))
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
@@ -702,6 +825,7 @@ def run_classification(
     tokenizer,
     num_labels,
     spatial_label_ids,
+    class_names,
     device,
 ):
     """Run standard classification from scratch."""
@@ -712,7 +836,11 @@ def run_classification(
         val_texts, val_labels, tokenizer, spatial_label_ids, args.max_length
     )
 
-    model = CTAClassificationModel(num_labels, use_spatial_head=args.use_spatial_head)
+    model = CTAClassificationModel(
+        num_labels,
+        use_spatial_head=args.use_spatial_head,
+        metric_embed_dim=args.metric_embed_dim,
+    )
     model.encoder.resize_token_embeddings(len(tokenizer))
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
@@ -725,6 +853,8 @@ def run_classification(
         device,
         args.epochs,
         args.lr,
+        class_names=class_names,
+        supcon_temperature=args.supcon_temperature,
         output_dir=args.output_dir,
     )
     tokenizer.save_pretrained(args.output_dir)
@@ -740,6 +870,7 @@ def run_contrastive(
     tokenizer,
     num_labels,
     spatial_label_ids,
+    class_names,
     device,
 ):
     """Run Stage 1: Contrastive pre-training."""
@@ -763,6 +894,8 @@ def run_contrastive(
         temperature=args.temperature,
         max_length=args.max_length,
         batch_size=args.batch_size,
+        mine_topk=args.mine_topk,
+        mine_hard_k=args.mine_hard_k,
         output_dir=args.output_dir,
     )
     tokenizer.save_pretrained(args.output_dir)
@@ -782,6 +915,7 @@ def run_fine_tune(
     tokenizer,
     num_labels,
     spatial_label_ids,
+    class_names,
     device,
 ):
     """Run Stage 2: Classification fine-tuning."""
@@ -802,7 +936,10 @@ def run_fine_tune(
     )
 
     model = CTAClassificationModel(
-        num_labels, config=config, use_spatial_head=args.use_spatial_head
+        num_labels,
+        config=config,
+        use_spatial_head=args.use_spatial_head,
+        metric_embed_dim=args.metric_embed_dim,
     )
     model.encoder.resize_token_embeddings(len(tokenizer))
     model.load_encoder_weights(args.load_encoder_from, strict=False)
@@ -831,6 +968,9 @@ def run_fine_tune(
         args.lr,
         args.encoder_lr,
         args.freeze_encoder,
+        args.freeze_warmup_epochs,
+        class_names,
+        args.supcon_temperature,
         args.output_dir,
     )
     tokenizer.save_pretrained(args.output_dir)
@@ -850,6 +990,7 @@ def run_combined(
     tokenizer,
     num_labels,
     spatial_label_ids,
+    class_names,
     device,
 ):
     """Run Stage 3: Combined multi-task polish."""
@@ -879,7 +1020,10 @@ def run_combined(
 
     # IMPORTANT: use CTAClassificationModel so train_epoch works (labels, pooled, logits)
     model = CTAClassificationModel(
-        num_labels, config=config, use_spatial_head=args.use_spatial_head
+        num_labels,
+        config=config,
+        use_spatial_head=args.use_spatial_head,
+        metric_embed_dim=args.metric_embed_dim,
     )
     model.encoder.resize_token_embeddings(len(tokenizer))
 
@@ -907,6 +1051,9 @@ def run_combined(
         lr=lr,
         encoder_lr=encoder_lr,
         freeze_encoder=False,
+        freeze_warmup_epochs=0,
+        class_names=class_names,
+        supcon_temperature=args.supcon_temperature,
         output_dir=args.output_dir,
     )
 
@@ -967,18 +1114,54 @@ Curriculum Learning Pipeline:
     )
     parser.add_argument("--temperature", type=float, default=0.07)
     parser.add_argument(
+        "--supcon_temperature",
+        type=float,
+        default=0.07,
+        help="Supervised contrastive temperature used in fine_tune/combined regularization",
+    )
+    parser.add_argument(
         "--alpha",
         type=float,
         default=0.2,
         help="Contrastive loss weight (combined mode, use 0.1-0.3)",
     )
     parser.add_argument("--embed_dim", type=int, default=128)
+    parser.add_argument(
+        "--metric_embed_dim",
+        type=int,
+        default=256,
+        help="Projection dimension for supervised contrastive regularization in fine_tune/combined",
+    )
     parser.add_argument("--max_length", type=int, default=128)
     parser.add_argument("--output_dir", type=str, default="./model")
     parser.add_argument("--synthetic_path", type=str, default="synthetic_df.csv")
     parser.add_argument("--test_size", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--name_repeat", type=int, default=3)
+    parser.add_argument(
+        "--name_dropout_prob",
+        type=float,
+        default=0.1,
+        help="Probability to drop column name tokens during text construction",
+    )
+    parser.add_argument(
+        "--mine_topk",
+        type=int,
+        default=50,
+        help="Top-k nearest neighbors to consider during hard negative mining",
+    )
+    parser.add_argument(
+        "--mine_hard_k",
+        type=int,
+        default=20,
+        help="Number of mined hard negatives retained per anchor",
+    )
+    parser.add_argument(
+        "--freeze_warmup_epochs",
+        type=int,
+        default=0,
+        help="In fine_tune mode, freeze encoder for first N epochs then unfreeze",
+    )
     parser.add_argument("--use_spatial_head", action="store_true")
     parser.add_argument(
         "--metric_alpha",
@@ -1000,7 +1183,9 @@ Curriculum Learning Pipeline:
     device = get_device()
 
     # Load and prepare data
-    df = load_training_data(args.synthetic_path, args.name_repeat)
+    df = load_training_data(
+        args.synthetic_path, args.name_repeat, args.name_dropout_prob
+    )
     label_encoder = LabelEncoder()
     df["label_id"] = label_encoder.fit_transform(df["label"])
     num_labels = len(label_encoder.classes_)
@@ -1061,6 +1246,7 @@ Curriculum Learning Pipeline:
         tokenizer,
         num_labels,
         spatial_label_ids,
+        label_encoder.classes_.tolist(),
         device,
     )
 
