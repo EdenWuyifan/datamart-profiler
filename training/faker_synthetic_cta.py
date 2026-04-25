@@ -16,7 +16,6 @@ def get_llm():
     """Initialize the LLM client."""
     portkey_headers = createHeaders(
         api_key=os.getenv("PORTKEY_API_KEY"),
-        virtual_key=os.getenv("PROVIDER_API_KEY"),
         metadata={"_user": "yfw215"},
     )
     return ChatOpenAI(

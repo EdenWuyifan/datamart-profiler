@@ -9,16 +9,13 @@ Supports Curriculum Learning Pipeline:
 
 Usage (Curriculum Learning - Recommended):
     # Stage 1: Pre-train encoder
-    python train_cta_classifier.py --mode contrastive --epochs 20 --output_dir ./model_contrastive
+    python train_cta_classifier.py --mode contrastive
     
     # Stage 2: Fine-tune classifier
-    python train_cta_classifier.py --mode fine_tune \\
-        --load_encoder_from ./model_contrastive/model.pt --epochs 10 \\
-        --output_dir ./model_fine_tune
+    python train_cta_classifier.py --mode fine_tune
     
     # Stage 3 (optional): Multi-task polish
-    python train_cta_classifier.py --mode combined \\
-        --load_encoder_from ./model_fine_tune/model.pt --alpha 0.2 --epochs 5
+    python train_cta_classifier.py --mode combined
 """
 
 import argparse
@@ -32,8 +29,8 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix, f1_score
+from sklearn.model_selection import GroupShuffleSplit, train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
@@ -63,6 +60,72 @@ DEFAULT_SPATIAL_LABELS = {
     "polygon",
     "multi-polygon",
     "multi-line",
+}
+GROUP_SPLIT_COLUMNS = (
+    "template_id",
+    "source_dataset",
+    "column_family",
+    "generation_seed",
+)
+COMMON_DEFAULTS = {
+    "synthetic_path": "synthetic_df.csv",
+    "batch_size": 32,
+    "temperature": 0.07,
+    "supcon_temperature": 0.07,
+    "embed_dim": 128,
+    "metric_embed_dim": 256,
+    "max_length": 128,
+    "name_repeat": 3,
+    "name_dropout_prob": 0.15,
+    "mine_topk": 50,
+    "mine_hard_k": 20,
+    "mine_interval": 2,
+    "test_size": 0.2,
+    "seed": 42,
+    "label_smoothing": 0.05,
+    "use_spatial_head": True,
+}
+MODE_DEFAULTS = {
+    "classification": {
+        "epochs": 10,
+        "lr": 2e-5,
+        "encoder_lr": None,
+        "output_dir": "./model",
+        "load_encoder_from": None,
+        "freeze_warmup_epochs": 0,
+        "metric_alpha": 0.05,
+        "alpha": 0.10,
+    },
+    "contrastive": {
+        "epochs": 8,
+        "lr": 2e-5,
+        "encoder_lr": None,
+        "output_dir": "./model_contrastive",
+        "load_encoder_from": None,
+        "freeze_warmup_epochs": 0,
+        "metric_alpha": 0.05,
+        "alpha": 0.10,
+    },
+    "fine_tune": {
+        "epochs": 10,
+        "lr": 2e-5,
+        "encoder_lr": 5e-6,
+        "output_dir": "./model_fine_tune",
+        "load_encoder_from": "./model_contrastive/model.pt",
+        "freeze_warmup_epochs": 1,
+        "metric_alpha": 0.05,
+        "alpha": 0.10,
+    },
+    "combined": {
+        "epochs": 3,
+        "lr": 1e-5,
+        "encoder_lr": 2e-6,
+        "output_dir": "./model_combined",
+        "load_encoder_from": "./model_fine_tune/model.pt",
+        "freeze_warmup_epochs": 0,
+        "metric_alpha": 0.05,
+        "alpha": 0.10,
+    },
 }
 
 
@@ -141,6 +204,15 @@ def get_device():
     return device
 
 
+def apply_mode_defaults(args):
+    """Fill unset CLI options from common defaults and mode-specific defaults."""
+    defaults = {**COMMON_DEFAULTS, **MODE_DEFAULTS[args.mode]}
+    for key, value in defaults.items():
+        if getattr(args, key) is None:
+            setattr(args, key, value)
+    return args
+
+
 def encode_all(model, loader, device):
     model.eval()
     all_emb = []
@@ -197,7 +269,11 @@ def load_training_data(
             f"Synthetic training data not found at {synthetic_path}!"
         )
 
-    df = pd.read_csv(synthetic_path)[["name", "values", "label"]].copy()
+    df = pd.read_csv(synthetic_path).copy()
+    required_cols = {"name", "values", "label"}
+    missing_cols = required_cols.difference(df.columns)
+    if missing_cols:
+        raise ValueError(f"Training data is missing required columns: {missing_cols}")
     print(f"Loaded {len(df)} synthetic samples from {synthetic_path}")
 
     def make_text(row):
@@ -218,6 +294,66 @@ def load_training_data(
         f"Total training samples: {len(df)} (name_repeat={name_repeat}, name_dropout_prob={name_dropout_prob})"
     )
     return df
+
+
+def inspect_duplicate_risk(df):
+    """Print exact duplicate counts that can inflate validation scores."""
+    checks = [
+        ("name+values+label", ["name", "values", "label"]),
+        ("text+label", ["text", "label"]),
+    ]
+    for label, cols in checks:
+        if all(c in df.columns for c in cols):
+            dupes = int(df.duplicated(subset=cols).sum())
+            if dupes:
+                print(
+                    f"WARNING: Found {dupes} duplicate {label} rows before splitting. "
+                    "Validation may be inflated if duplicates cross the split."
+                )
+
+
+def split_train_val(df, test_size, seed, group_split_col=None):
+    """Split data, using a stable group column when one is available."""
+    available_group_cols = [c for c in GROUP_SPLIT_COLUMNS if c in df.columns]
+    if group_split_col is not None and group_split_col not in df.columns:
+        raise ValueError(f"Requested group split column not found: {group_split_col}")
+
+    group_col = group_split_col or (
+        available_group_cols[0] if available_group_cols else None
+    )
+    if group_col is not None:
+        print(f"Using group-aware train/val split by '{group_col}'")
+        splitter = GroupShuffleSplit(
+            n_splits=1, test_size=test_size, random_state=seed
+        )
+        train_idx, val_idx = next(
+            splitter.split(df, df["label_id"], groups=df[group_col].astype(str))
+        )
+        train_df = df.iloc[train_idx]
+        val_df = df.iloc[val_idx]
+
+        train_classes = set(train_df["label_id"].tolist())
+        val_classes = set(val_df["label_id"].tolist())
+        missing_from_val = sorted(train_classes.difference(val_classes))
+        if missing_from_val:
+            print(
+                "WARNING: Group split left some train classes out of validation: "
+                f"{missing_from_val}"
+            )
+    else:
+        train_df, val_df = train_test_split(
+            df,
+            test_size=test_size,
+            random_state=seed,
+            stratify=df["label_id"],
+        )
+
+    return (
+        train_df["text"].tolist(),
+        val_df["text"].tolist(),
+        train_df["label_id"].tolist(),
+        val_df["label_id"].tolist(),
+    )
 
 
 # ============================================================================
@@ -655,7 +791,7 @@ def train_classification(
 
     optimizer, scheduler = _build_optimizer_and_scheduler(epochs, current_freeze)
 
-    best_val_acc = 0
+    best_val_macro_f1 = -1.0
     for epoch in range(epochs):
         if (
             freeze_warmup_epochs > 0
@@ -686,9 +822,15 @@ def train_classification(
             mode="val",
             return_predictions=True,
         )
+        f1_kwargs = {"average": "macro", "zero_division": 0}
+        if class_names is not None:
+            f1_kwargs["labels"] = list(range(len(class_names)))
+        val_macro_f1 = f1_score(y_true, y_pred, **f1_kwargs)
 
         print(
-            f"Epoch {epoch+1}/{epochs}: Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}, Val Acc={val_acc:.4f}"
+            f"Epoch {epoch+1}/{epochs}: Train Loss={train_loss:.4f}, "
+            f"Val Loss={val_loss:.4f}, Val Acc={val_acc:.4f}, "
+            f"Val Macro-F1={val_macro_f1:.4f}"
         )
         print("Validation confusion matrix:")
         print(confusion_matrix(y_true, y_pred))
@@ -699,11 +841,11 @@ def train_classification(
             report_kwargs["target_names"] = class_names
         print(classification_report(y_true, y_pred, **report_kwargs))
 
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
+        if val_macro_f1 > best_val_macro_f1:
+            best_val_macro_f1 = val_macro_f1
             os.makedirs(output_dir, exist_ok=True)
             torch.save(model.state_dict(), f"{output_dir}/model.pt")
-            print(f"  → Saved best model (acc={val_acc:.4f})")
+            print(f"  → Saved best model (macro_f1={val_macro_f1:.4f})")
 
     return model
 
@@ -723,35 +865,42 @@ def train_contrastive(
     batch_size=32,
     mine_topk=50,
     mine_hard_k=20,
+    mine_interval=2,
     output_dir="./model_contrastive",
 ):
     """Contrastive learning training (Stage 1: pre-training)."""
     model.to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    mine_interval = max(1, mine_interval)
 
     # loader for embedding all samples each epoch
     embed_ds = EmbedDataset(train_texts, train_labels, tokenizer, max_length)
     embed_loader = DataLoader(embed_ds, batch_size=batch_size, shuffle=False)
+    val_embed_ds = EmbedDataset(val_texts, val_labels, tokenizer, max_length)
+    val_embed_loader = DataLoader(val_embed_ds, batch_size=batch_size, shuffle=False)
 
     best_val_loss = float("inf")
+    hard_negs = None
+    val_hard_negs = None
 
     for epoch in range(epochs):
         # 1) mine hard negatives using current model
-        embs, labs, _ = encode_all(model, embed_loader, device)
-        hard_negs = mine_hard_negatives_cosine(
-            embs, labs, topk=mine_topk, hard_k=mine_hard_k
-        )
+        if hard_negs is None or epoch % mine_interval == 0:
+            embs, labs, _ = encode_all(model, embed_loader, device)
+            hard_negs = mine_hard_negatives_cosine(
+                embs, labs, topk=mine_topk, hard_k=mine_hard_k
+            )
+        else:
+            print(
+                f"Epoch {epoch+1}/{epochs}: reusing hard negatives "
+                f"(mine_interval={mine_interval})"
+            )
 
         # 2) build triplet dataset for this epoch
         triplet_ds = TripletContrastiveDataset(
             train_texts, train_labels, hard_negs, tokenizer, max_length=max_length
         )
-        # Validation uses empty hard_negs (falls back to random negatives)
-        val_ds = TripletContrastiveDataset(
-            val_texts, val_labels, {}, tokenizer, max_length=max_length
-        )
         train_loader = DataLoader(triplet_ds, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
         # 3) train
         model.train()
@@ -778,11 +927,22 @@ def train_contrastive(
             train_loss += loss.item()
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
 
-        # 4) validation (you can keep your current val loop; shown as loss-only)
+        # 4) validation against mined validation hard negatives
+        if val_hard_negs is None or epoch % mine_interval == 0:
+            val_embs, val_labs, _ = encode_all(model, val_embed_loader, device)
+            val_hard_negs = mine_hard_negatives_cosine(
+                val_embs, val_labs, topk=mine_topk, hard_k=mine_hard_k
+            )
+        val_ds = TripletContrastiveDataset(
+            val_texts, val_labels, val_hard_negs, tokenizer, max_length=max_length
+        )
+        val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
-            for batch in tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]"):
+            val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]")
+            for batch in val_pbar:
                 a = model.get_embeddings(
                     batch["a_input_ids"].to(device),
                     batch["a_attention_mask"].to(device),
@@ -798,7 +958,7 @@ def train_contrastive(
 
                 loss = info_nce_triplet(a, p, n, temperature=temperature)
                 val_loss += loss.item()
-                pbar.set_postfix({"loss": f"{loss.item():.4f}"})
+                val_pbar.set_postfix({"loss": f"{loss.item():.4f}"})
 
         avg_val_loss = val_loss / len(val_loader)
         print(f"Epoch {epoch+1}/{epochs}: Val Loss={avg_val_loss:.4f}")
@@ -896,6 +1056,7 @@ def run_contrastive(
         batch_size=args.batch_size,
         mine_topk=args.mine_topk,
         mine_hard_k=args.mine_hard_k,
+        mine_interval=args.mine_interval,
         output_dir=args.output_dir,
     )
     tokenizer.save_pretrained(args.output_dir)
@@ -976,7 +1137,7 @@ def run_fine_tune(
     tokenizer.save_pretrained(args.output_dir)
     print(f"\n✅ Stage 2 complete! Model saved to {args.output_dir}/model.pt")
     print(
-        f"   Optional: Run --mode combined --load_encoder_from {args.output_dir}/model.pt --alpha 0.2"
+        f"   Optional: Run --mode combined --load_encoder_from {args.output_dir}/model.pt --alpha 0.10"
     )
     return model
 
@@ -998,6 +1159,11 @@ def run_combined(
     print("STAGE 3: Combined Multi-task Fine-tuning")
     print("=" * 60)
     print(f"⚠️  Using alpha={args.alpha}. Should be low (0.1-0.3) after pre-training.")
+
+    if not args.load_encoder_from or not Path(args.load_encoder_from).exists():
+        raise FileNotFoundError(
+            f"Fine-tuned checkpoint not found: {args.load_encoder_from}"
+        )
 
     train_ds = CTADataset(
         train_texts, train_labels, tokenizer, spatial_label_ids, args.max_length
@@ -1074,15 +1240,13 @@ def main():
         epilog="""
 Curriculum Learning Pipeline:
   1. Stage 1 (contrastive): Pre-train encoder with contrastive learning
-     python train_cta_classifier.py --mode contrastive --epochs 20 --output_dir ./model_contrastive
+     python train_cta_classifier.py --mode contrastive
   
   2. Stage 2 (fine_tune): Load encoder, fine-tune classifier
-     python train_cta_classifier.py --mode fine_tune \\
-         --load_encoder_from ./model_contrastive/model.pt --epochs 10
+     python train_cta_classifier.py --mode fine_tune
   
   3. Stage 3 (combined, optional): Multi-task polish with low alpha
-     python train_cta_classifier.py --mode combined \\
-         --load_encoder_from ./model_fine_tune/model.pt --alpha 0.2 --epochs 5
+     python train_cta_classifier.py --mode combined
         """,
     )
     parser.add_argument(
@@ -1092,9 +1256,9 @@ Curriculum Learning Pipeline:
         choices=["classification", "contrastive", "fine_tune", "combined"],
         help="Training mode",
     )
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--lr", type=float, default=2e-5)
+    parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument("--batch_size", type=int, default=None)
+    parser.add_argument("--lr", type=float, default=None)
     parser.add_argument(
         "--encoder_lr",
         type=float,
@@ -1112,70 +1276,99 @@ Curriculum Learning Pipeline:
         default=None,
         help="Path to pretrained encoder checkpoint",
     )
-    parser.add_argument("--temperature", type=float, default=0.07)
+    parser.add_argument("--temperature", type=float, default=None)
     parser.add_argument(
         "--supcon_temperature",
         type=float,
-        default=0.07,
+        default=None,
         help="Supervised contrastive temperature used in fine_tune/combined regularization",
     )
     parser.add_argument(
         "--alpha",
         type=float,
-        default=0.2,
+        default=None,
         help="Contrastive loss weight (combined mode, use 0.1-0.3)",
     )
-    parser.add_argument("--embed_dim", type=int, default=128)
+    parser.add_argument("--embed_dim", type=int, default=None)
     parser.add_argument(
         "--metric_embed_dim",
         type=int,
-        default=256,
+        default=None,
         help="Projection dimension for supervised contrastive regularization in fine_tune/combined",
     )
-    parser.add_argument("--max_length", type=int, default=128)
-    parser.add_argument("--output_dir", type=str, default="./model")
-    parser.add_argument("--synthetic_path", type=str, default="synthetic_df.csv")
-    parser.add_argument("--test_size", type=float, default=0.2)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--name_repeat", type=int, default=3)
+    parser.add_argument("--max_length", type=int, default=None)
+    parser.add_argument("--output_dir", type=str, default=None)
+    parser.add_argument("--synthetic_path", type=str, default=None)
+    parser.add_argument("--test_size", type=float, default=None)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--name_repeat", type=int, default=None)
     parser.add_argument(
         "--name_dropout_prob",
         type=float,
-        default=0.1,
+        default=None,
         help="Probability to drop column name tokens during text construction",
     )
     parser.add_argument(
         "--mine_topk",
         type=int,
-        default=50,
+        default=None,
         help="Top-k nearest neighbors to consider during hard negative mining",
     )
     parser.add_argument(
         "--mine_hard_k",
         type=int,
-        default=20,
+        default=None,
         help="Number of mined hard negatives retained per anchor",
+    )
+    parser.add_argument(
+        "--mine_interval",
+        type=int,
+        default=None,
+        help="Re-mine hard negatives every N epochs during contrastive training",
+    )
+    parser.add_argument(
+        "--group_split_col",
+        type=str,
+        default=None,
+        help=(
+            "Optional stable group column for train/val split. If omitted, the "
+            "first available known group column is used."
+        ),
     )
     parser.add_argument(
         "--freeze_warmup_epochs",
         type=int,
-        default=0,
+        default=None,
         help="In fine_tune mode, freeze encoder for first N epochs then unfreeze",
     )
-    parser.add_argument("--use_spatial_head", action="store_true")
+    spatial_head_group = parser.add_mutually_exclusive_group()
+    spatial_head_group.add_argument(
+        "--use_spatial_head",
+        dest="use_spatial_head",
+        action="store_true",
+        default=None,
+        help="Enable the auxiliary spatial/non-spatial head",
+    )
+    spatial_head_group.add_argument(
+        "--no-use_spatial_head",
+        dest="use_spatial_head",
+        action="store_false",
+        help="Disable the auxiliary spatial/non-spatial head",
+    )
     parser.add_argument(
         "--metric_alpha",
         type=float,
-        default=0.1,
+        default=None,
         help="Aux supervised contrastive weight during fine-tune (try 0.05-0.2)",
     )
     parser.add_argument(
         "--label_smoothing",
         type=float,
-        default=0.05,
+        default=None,
         help="Cross-entropy label smoothing (try 0.05-0.1)",
     )
     args = parser.parse_args()
+    args = apply_mode_defaults(args)
 
     # Setup
     torch.manual_seed(args.seed)
@@ -1188,6 +1381,7 @@ Curriculum Learning Pipeline:
     )
     label_encoder = LabelEncoder()
     df["label_id"] = label_encoder.fit_transform(df["label"])
+    inspect_duplicate_risk(df)
     num_labels = len(label_encoder.classes_)
     print(f"Number of classes: {num_labels}")
     print(f"Classes: {label_encoder.classes_.tolist()}")
@@ -1212,12 +1406,11 @@ Curriculum Learning Pipeline:
     else:
         spatial_label_ids = None
 
-    train_texts, val_texts, train_labels, val_labels = train_test_split(
-        df["text"].tolist(),
-        df["label_id"].tolist(),
+    train_texts, val_texts, train_labels, val_labels = split_train_val(
+        df,
         test_size=args.test_size,
-        random_state=args.seed,
-        stratify=df["label_id"],
+        seed=args.seed,
+        group_split_col=args.group_split_col,
     )
     print(f"Train size: {len(train_texts)}, Val size: {len(val_texts)}")
 
@@ -1260,6 +1453,8 @@ Curriculum Learning Pipeline:
                 "model_name": MODEL_NAME,
                 "embed_dim": args.embed_dim if args.mode != "classification" else None,
                 "name_repeat": args.name_repeat,
+                "mine_interval": args.mine_interval,
+                "group_split_col": args.group_split_col,
                 "special_tokens": SPECIAL_TOKENS,
             },
             f,
