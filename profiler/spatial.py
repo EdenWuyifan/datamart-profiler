@@ -28,10 +28,13 @@ logger = logging.getLogger(__name__)
 
 # Model download configuration - individual file URLs from NYU Box
 GEO_MODEL_FILES = {
-    "model.pt": "https://nyu.box.com/shared/static/2x0rnwhte4e8fbxkf0jyyd48cid232ci.pt",
-    "config.json": "https://nyu.box.com/shared/static/eojx465mrfu1b5vasjkilt3rh9uvz19p.json",
-    "label_encoder.json": "https://nyu.box.com/shared/static/hl347mei57rxe1flgap19j2lxst3xpa9.json",
+    "model.pt": "https://nyu.box.com/shared/static/1houlci416spy0oeg89sn251idqnzc05.pt",
+    "config.json": "https://nyu.box.com/shared/static/qz1402ivuiv42wkct7qon43xhb9izvc1.json",
+    "label_encoder.json": "https://nyu.box.com/shared/static/f9zjrl38k44qxbhuhgavb6j3d8k80g2b.json",
+    "tokenizer.json": "https://nyu.box.com/shared/static/awyxvicqpnvt2cl329sugejhy1iu5532.json",
+    "tokenizer_config.json": "https://nyu.box.com/shared/static/yj3ofletauzqirjy24826hcshzfl34pq.json",
 }
+GEO_MODEL_REQUIRED_FILES = tuple(GEO_MODEL_FILES)
 
 
 N_RANGES = 3
@@ -736,10 +739,6 @@ def download_geo_model(model_dir: str, files: dict = None) -> None:
 
     for filename, url in files.items():
         file_path = model_path / filename
-        if file_path.exists():
-            logger.info(f"  {filename}: already exists, skipping")
-            continue
-
         logger.info(f"  Downloading {filename}...")
         try:
             response = requests.get(url, stream=True, timeout=300)
@@ -777,7 +776,7 @@ class GeoClassifier:
                 otherwise a user cache directory)
             auto_download: If True, automatically download model if not found
         """
-        required_files = list(GEO_MODEL_FILES.keys())
+        required_files = list(GEO_MODEL_REQUIRED_FILES)
         if model_dir is None:
             # Default to profiler/model relative to this module's location
             profiler_dir = Path(__file__).parent
@@ -790,18 +789,25 @@ class GeoClassifier:
 
         self.model_dir = Path(model_dir)
 
-        # Check if model files exist, download if needed
         missing_files = [f for f in required_files if not (self.model_dir / f).exists()]
-
         if missing_files:
             if auto_download:
-                logger.info(f"Model files missing: {missing_files}. Downloading...")
+                logger.info(
+                    "Model artifact incomplete (%s missing). Downloading complete artifact...",
+                    missing_files,
+                )
                 download_geo_model(str(self.model_dir))
             else:
                 raise FileNotFoundError(
                     f"Model files not found in {self.model_dir}: {missing_files}. "
                     "Set auto_download=True or download from NYU Box."
                 )
+
+        missing_files = [f for f in required_files if not (self.model_dir / f).exists()]
+        if missing_files:
+            raise FileNotFoundError(
+                f"Model artifact in {self.model_dir} is incomplete: {missing_files}"
+            )
 
         # Load label encoder config
         with open(self.model_dir / "label_encoder.json") as f:
@@ -822,11 +828,7 @@ class GeoClassifier:
         else:
             self.device = torch.device("cpu")
 
-        # Load tokenizer (prefer saved, fallback to model_name)
-        if (self.model_dir / "tokenizer_config.json").exists():
-            self.tokenizer = AutoTokenizer.from_pretrained(str(self.model_dir))
-        else:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(str(self.model_dir))
 
         # Load encoder config from saved directory
         encoder_config = AutoConfig.from_pretrained(str(self.model_dir))
@@ -837,7 +839,7 @@ class GeoClassifier:
         checkpoint_keys = set(checkpoint.keys())
 
         # Detect model type from checkpoint keys (prioritize checkpoint structure over mode)
-        has_projection = any("projection" in k for k in checkpoint_keys)
+        has_projection = any(k.startswith("projection.") for k in checkpoint_keys)
         has_spatial_head = any("spatial_head" in k for k in checkpoint_keys)
 
         # Determine which model to use based on checkpoint structure
@@ -870,6 +872,9 @@ class GeoClassifier:
             )
 
         # Load saved weights (use strict=False to handle missing/extra keys gracefully)
+        checkpoint = {
+            k: v for k, v in checkpoint.items() if not k.startswith("metric_projection.")
+        }
         missing_keys, unexpected_keys = self.model.load_state_dict(
             checkpoint, strict=False
         )

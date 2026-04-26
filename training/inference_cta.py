@@ -102,11 +102,7 @@ class CTAClassifier:
         else:
             self.device = torch.device("cpu")
 
-        # Load tokenizer (prefer saved, fallback to model_name)
-        if (self.model_dir / "tokenizer_config.json").exists():
-            self.tokenizer = AutoTokenizer.from_pretrained(str(self.model_dir))
-        else:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(str(self.model_dir))
 
         # Load encoder config from saved directory
         encoder_config = AutoConfig.from_pretrained(str(self.model_dir))
@@ -117,7 +113,7 @@ class CTAClassifier:
         checkpoint_keys = set(checkpoint.keys())
 
         # Detect model type from checkpoint keys (prioritize checkpoint structure over mode)
-        has_projection = any("projection" in k for k in checkpoint_keys)
+        has_projection = any(k.startswith("projection.") for k in checkpoint_keys)
         has_spatial_head = any("spatial_head" in k for k in checkpoint_keys)
 
         # Determine which model to use based on checkpoint structure
@@ -141,6 +137,9 @@ class CTAClassifier:
             )
 
         # Load saved weights (use strict=False to handle missing/extra keys gracefully)
+        checkpoint = {
+            k: v for k, v in checkpoint.items() if not k.startswith("metric_projection.")
+        }
         missing_keys, unexpected_keys = self.model.load_state_dict(
             checkpoint, strict=False
         )

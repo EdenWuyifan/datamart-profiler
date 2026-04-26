@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "atlas-profiler"
-version = "0.0.1b0"
+version = "0.0.2"
 description = "Data profiling with spatial column type annotation."
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
