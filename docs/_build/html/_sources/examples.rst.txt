@@ -1,0 +1,97 @@
+Examples
+========
+
+Basic Usage
+-----------
+
+.. code-block:: python
+
+   import pandas as pd
+   from atlas_profiler import process_dataset
+
+   # Load data into DataFrame
+   df = pd.read_csv("geospatial_data.csv")
+
+   # Process with all features enabled
+   metadata = process_dataset(
+       df,
+       geo_classifier=True,
+       geo_classifier_threshold=0.5,
+       coverage=True,
+       plots=True,
+       include_sample=True,
+   )
+
+   # Access spatial coverage
+   spatial_coverage = metadata.get('spatial_coverage', {})
+   print(f"Bounding box: {spatial_coverage.get('bbox')}")
+
+Getting Started with NYC Traffic Data
+-------------------------------------
+
+.. code-block:: python
+
+   from atlas_profiler import process_dataset
+   import pandas as pd
+
+   # Load sample NYC traffic volume data
+   nyc_traffic_volume_sample_df = pd.read_csv(
+       "hf://datasets/oscur/automated-traffic-volume-counts-sample/sample_traffic.csv"
+   )
+
+   nyc_traffic_volume_sample_df.head()
+
+.. code-block:: python
+
+   # Profile the dataset with geo classifier enabled
+   profiled_columns = process_dataset(
+       nyc_traffic_volume_sample_df,
+       coverage=False,
+       indexes=False,
+       geo_classifier=True,
+       load_max_size=1000000,
+   )
+
+   profiled_columns
+
+Output Structure
+================
+
+The ``process_dataset`` function returns a dictionary containing comprehensive metadata about the profiled dataset. Here's a breakdown of the main fields:
+
+**Dataset-level Information:**
+
+- ``nb_rows``: Total number of rows in the dataset
+- ``nb_profiled_rows``: Number of rows actually profiled (may be less if sampling was used)
+- ``nb_columns``: Total number of columns
+- ``types``: Summary of structural types present (e.g., ``{"Integer": 2, "Text": 3, "Float": 1}``)
+
+**Column-level Information:**
+
+- ``columns``: List of column metadata, each containing:
+  - ``name``: Column name
+  - ``structural_type``: Detected type (e.g., "Integer", "Text", "Float", "GeoCoordinates")
+  - ``semantic_types``: List of semantic annotations (e.g., ["latitude"], ["address"])
+  - ``num_distinct_values``: Number of unique values
+  - ``coverage``: Percentage of non-missing values
+  - ``sample_values``: List of sample values from the column
+
+**Spatial Information:**
+
+- ``spatial_coverage``: Bounding box and coverage statistics for spatial columns
+  - ``bbox``: [min_lon, min_lat, max_lon, max_lat]
+  - ``total_points``: Number of spatial points
+  - ``geohash_coverage``: Geohash-based coverage areas
+
+**Temporal Information:**
+
+- ``temporal_coverage``: Date range and resolution for temporal columns
+  - ``min_date``, ``max_date``: Date range
+  - ``temporal_resolution``: Detected time granularity (e.g., "day", "hour")
+
+**Additional Metadata:**
+
+- ``dataset_keywords``: Extracted keywords from column names
+- ``sample``: Optional random sample rows (if ``include_sample=True``)
+- ``plots``: Optional histogram data (if ``plots=True``)
+- ``profiling_time``: Timing information for each profiling step

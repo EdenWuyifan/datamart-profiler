@@ -1,0 +1,1211 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>profiler.core &mdash; Atlas Profiler 0.0.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=e3a6060d"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            Atlas Profiler
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">Changelog</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Atlas Profiler</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">profiler.core</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for profiler.core</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pandas.errors</span><span class="w"> </span><span class="kn">import</span> <span class="n">EmptyDataError</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">string</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.numerical</span><span class="w"> </span><span class="kn">import</span> <span class="n">mean_stddev</span><span class="p">,</span> <span class="n">get_numerical_ranges</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.profile_types</span><span class="w"> </span><span class="kn">import</span> <span class="n">identify_types</span><span class="p">,</span> <span class="n">determine_dataset_type</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.spatial</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LatLongColumn</span><span class="p">,</span>
+    <span class="n">Geohasher</span><span class="p">,</span>
+    <span class="n">nominatim_resolve_all</span><span class="p">,</span>
+    <span class="n">pair_latlong_columns</span><span class="p">,</span>
+    <span class="n">get_spatial_ranges</span><span class="p">,</span>
+    <span class="n">parse_wkt_column</span><span class="p">,</span>
+    <span class="n">GeoClassifier</span><span class="p">,</span>
+    <span class="n">HybridGeoClassifier</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.temporal</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_temporal_resolution</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">types</span>
+
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="c1"># Mapping from GeoClassifier labels to (structural_type, [semantic_types])</span>
+<span class="c1"># Only spatial types are included - &quot;non_spatial&quot; falls through to regular workflow</span>
+<span class="n">GEO_CLASSIFIER_SPATIAL_MAP</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="c1"># Lat/Long coordinates</span>
+    <span class="s2">&quot;latitude&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">LATITUDE</span><span class="p">]),</span>
+    <span class="s2">&quot;longitude&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">LONGITUDE</span><span class="p">]),</span>
+    <span class="c1"># Projected coordinates (e.g., State Plane, UTM)</span>
+    <span class="s2">&quot;x_coord&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="p">[]),</span>
+    <span class="s2">&quot;y_coord&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="p">[]),</span>
+    <span class="c1"># WKT geometry types</span>
+    <span class="s2">&quot;point&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">GEO_POINT</span><span class="p">,</span> <span class="p">[]),</span>
+    <span class="s2">&quot;polygon&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">GEO_POLYGON</span><span class="p">,</span> <span class="p">[]),</span>
+    <span class="s2">&quot;multi-polygon&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">GEO_POLYGON</span><span class="p">,</span> <span class="p">[]),</span>
+    <span class="s2">&quot;line&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">GEO_POLYGON</span><span class="p">,</span> <span class="p">[]),</span>
+    <span class="s2">&quot;multi-line&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">GEO_POLYGON</span><span class="p">,</span> <span class="p">[]),</span>
+    <span class="c1"># Address-related</span>
+    <span class="s2">&quot;zip5&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ADDRESS</span><span class="p">]),</span>
+    <span class="s2">&quot;zip9&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ADDRESS</span><span class="p">]),</span>
+    <span class="s2">&quot;address&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ADDRESS</span><span class="p">]),</span>
+    <span class="c1"># Administrative areas</span>
+    <span class="s2">&quot;borough&quot;</span><span class="p">:</span> <span class="p">(</span>
+        <span class="n">types</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span>
+        <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">],</span>
+    <span class="p">),</span>  <span class="c1"># Named boroughs (e.g., &quot;Brooklyn&quot;, &quot;Queens&quot;)</span>
+    <span class="s2">&quot;borough_code&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">]),</span>  <span class="c1"># Borough codes (numeric/alphanumeric)</span>
+    <span class="s2">&quot;city&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">]),</span>
+    <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">]),</span>
+    <span class="s2">&quot;state_code&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">]),</span>
+    <span class="s2">&quot;country&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">]),</span>
+    <span class="c1"># NYC-specific identifiers (spatial context)</span>
+    <span class="s2">&quot;bbl&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">INTEGER</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ID</span><span class="p">]),</span>
+    <span class="s2">&quot;bin&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">INTEGER</span><span class="p">,</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ID</span><span class="p">]),</span>
+<span class="p">}</span>
+
+
+<span class="n">RANDOM_SEED</span> <span class="o">=</span> <span class="mi">89</span>
+
+<span class="n">MAX_SIZE</span> <span class="o">=</span> <span class="mi">5000000</span>  <span class="c1"># 5 MB</span>
+<span class="n">SAMPLE_ROWS</span> <span class="o">=</span> <span class="mi">20</span>
+
+<span class="n">MAX_UNCLEAN_ADDRESSES</span> <span class="o">=</span> <span class="mf">0.20</span>  <span class="c1"># 20%</span>
+
+
+<span class="n">MAX_SKIPPED_ROWS</span> <span class="o">=</span> <span class="mi">6</span>
+<span class="sd">&quot;&quot;&quot;Maximum number of rows to discard at the top of the file&quot;&quot;&quot;</span>
+
+<span class="n">HEADER_CONSISTENT_ROWS</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="sd">&quot;&quot;&quot;Stop throwing out lines when that many in a row have same number of columns</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="n">MAX_GEOHASHES</span> <span class="o">=</span> <span class="mi">100</span>
+
+
+<span class="n">_re_word_split</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\W+&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="truncate_string">
+<a class="viewcode-back" href="../../api.html#atlas_profiler.truncate_string">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">truncate_string</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">140</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Truncate a string, replacing characters over the limit with &quot;...&quot;.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">limit</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">s</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Try to find a space</span>
+        <span class="n">space</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">rfind</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="n">limit</span> <span class="o">-</span> <span class="mi">20</span><span class="p">,</span> <span class="n">limit</span> <span class="o">-</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">space</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">s</span><span class="p">[:</span> <span class="n">limit</span> <span class="o">-</span> <span class="mi">3</span><span class="p">]</span> <span class="o">+</span> <span class="s2">&quot;...&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">s</span><span class="p">[:</span><span class="n">space</span><span class="p">]</span> <span class="o">+</span> <span class="s2">&quot;...&quot;</span></div>
+
+
+
+<span class="n">DELIMITERS</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">string</span><span class="o">.</span><span class="n">punctuation</span><span class="p">)</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">string</span><span class="o">.</span><span class="n">whitespace</span><span class="p">)</span>
+<span class="n">UPPER</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">string</span><span class="o">.</span><span class="n">ascii_uppercase</span><span class="p">)</span>
+<span class="n">LOWER</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">string</span><span class="o">.</span><span class="n">ascii_lowercase</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="expand_attribute_name">
+<a class="viewcode-back" href="../../api.html#atlas_profiler.expand_attribute_name">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">expand_attribute_name</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Expand an attribute names to keywords derived from it.&quot;&quot;&quot;</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
+
+    <span class="n">word</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">DELIMITERS</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">word</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">word</span><span class="p">)</span>
+                <span class="n">word</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="n">word</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">word</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="ow">in</span> <span class="n">string</span><span class="o">.</span><span class="n">digits</span><span class="p">)</span> <span class="o">!=</span> <span class="p">(</span><span class="n">c</span> <span class="ow">in</span> <span class="n">string</span><span class="o">.</span><span class="n">digits</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+                <span class="n">word</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="ow">in</span> <span class="n">LOWER</span> <span class="ow">and</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">UPPER</span>
+            <span class="p">):</span>
+                <span class="k">yield</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">word</span><span class="p">)</span>
+                <span class="n">word</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">word</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+
+    <span class="k">yield</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">word</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># Simple no-op context manager for compatibility</span>
+<div class="viewcode-block" id="NoOpContext">
+<a class="viewcode-back" href="../../api.html#atlas_profiler.NoOpContext">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NoOpContext</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+
+<div class="viewcode-block" id="load_data">
+<a class="viewcode-back" href="../../api.html#atlas_profiler.load_data">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">load_max_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">indexes</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load data from file path, file object, or DataFrame.</span>
+
+<span class="sd">    Returns sampled data for profiling along with full-data statistics.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">load_max_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">load_max_size</span> <span class="o">=</span> <span class="n">MAX_SIZE</span>
+
+    <span class="n">metadata</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">full_data_stats</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># Step 1: Convert file path/file object to DataFrame</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">)):</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;data file does not exist&quot;</span><span class="p">)</span>
+
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;size&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">getsize</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;File size: </span><span class="si">%r</span><span class="s2"> bytes&quot;</span><span class="p">,</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;size&quot;</span><span class="p">])</span>
+
+        <span class="c1"># Detect separator from extension</span>
+        <span class="n">sep</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\t</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.tsv&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="s2">&quot;,&quot;</span>
+
+        <span class="c1"># For large files, estimate rows to load based on target size</span>
+        <span class="n">nrows</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;size&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">load_max_size</span><span class="p">:</span>
+            <span class="c1"># Sample first 1000 rows to estimate average row size</span>
+            <span class="n">sample_df</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span>
+                <span class="n">path</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">na_filter</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="n">sep</span><span class="p">,</span> <span class="n">nrows</span><span class="o">=</span><span class="mi">1000</span>
+            <span class="p">)</span>
+            <span class="n">avg_row_size</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;size&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">sample_df</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sample_df</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">100</span>
+            <span class="p">)</span>
+            <span class="n">nrows</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">load_max_size</span> <span class="o">/</span> <span class="n">avg_row_size</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Large file, loading ~</span><span class="si">%d</span><span class="s2"> rows (estimated)&quot;</span><span class="p">,</span> <span class="n">nrows</span><span class="p">)</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">na_filter</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="n">sep</span><span class="p">,</span> <span class="n">nrows</span><span class="o">=</span><span class="n">nrows</span><span class="p">)</span>
+
+    <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s2">&quot;read&quot;</span><span class="p">):</span>
+        <span class="c1"># File object</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;size&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">na_filter</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">pandas</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;data should be a filename, a file object, or a pandas.DataFrame&quot;</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Step 2: Process DataFrame (common path for all input types)</span>
+    <span class="k">if</span> <span class="n">indexes</span> <span class="ow">and</span> <span class="p">(</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">int64</span>
+        <span class="ow">or</span> <span class="ow">not</span> <span class="n">pandas</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)))</span><span class="o">.</span><span class="n">equals</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;nb_rows&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;DataFrame: </span><span class="si">%d</span><span class="s2"> rows, </span><span class="si">%d</span><span class="s2"> columns&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+    <span class="c1"># Compute stats on data before sampling (cheap operations)</span>
+    <span class="c1"># Also extract 3 non-null sample values for geo classifier</span>
+    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="c1"># Count distinct values</span>
+        <span class="n">full_data_stats</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;num_distinct_values&quot;</span><span class="p">:</span> <span class="n">data</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">nunique</span><span class="p">()}</span>
+
+        <span class="c1"># Extract 3 unique non-null sample values from full dataset</span>
+        <span class="n">sample_values</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">seen</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">col_series</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">col</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">col_series</span><span class="p">:</span>
+            <span class="n">v_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">v_str</span> <span class="ow">and</span> <span class="n">v_str</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;nan&quot;</span><span class="p">,</span> <span class="s2">&quot;None&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">v_str</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+                <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">v_str</span><span class="p">)</span>
+                <span class="n">sample_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">v_str</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sample_values</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">3</span><span class="p">:</span>
+                    <span class="k">break</span>
+        <span class="n">full_data_stats</span><span class="p">[</span><span class="n">col</span><span class="p">][</span><span class="s2">&quot;sample_values&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sample_values</span>
+
+    <span class="c1"># Sample if DataFrame exceeds target size</span>
+    <span class="n">avg_row_size</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">memory_usage</span><span class="p">(</span><span class="n">deep</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">max_rows</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">load_max_size</span> <span class="o">/</span> <span class="n">avg_row_size</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">max_rows</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Sampling </span><span class="si">%d</span><span class="s2"> rows for profiling (target size: </span><span class="si">%d</span><span class="s2"> bytes)&quot;</span><span class="p">,</span>
+            <span class="n">max_rows</span><span class="p">,</span>
+            <span class="n">load_max_size</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="n">max_rows</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">RANDOM_SEED</span><span class="p">)</span>
+
+    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;nb_profiled_rows&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+    <span class="c1"># Convert to string dtype (workaround for pandas nan-as-&#39;nan&#39; bug)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">object</span><span class="p">)</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">columns</span><span class="p">,</span> <span class="n">full_data_stats</span></div>
+
+
+
+<div class="viewcode-block" id="process_column">
+<a class="viewcode-back" href="../../api.html#atlas_profiler.process_column">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">process_column</span><span class="p">(</span>
+    <span class="n">array</span><span class="p">,</span>
+    <span class="n">column_meta</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">manual</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">plots</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">coverage</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">datamart_geo_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">nominatim</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">geo_prediction</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># Pre-computed from batch prediction</span>
+<span class="p">):</span>
+    <span class="n">structural_type</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">semantic_types_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">additional_meta</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">used_geo_prediction</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1"># Use pre-computed geo_prediction if available and no manual override</span>
+    <span class="k">if</span> <span class="n">geo_prediction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">manual</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="n">geo_prediction</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">GEO_CLASSIFIER_SPATIAL_MAP</span><span class="p">:</span>
+            <span class="c1"># Geo classifier identified a spatial type</span>
+            <span class="n">used_geo_prediction</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">structural_type</span><span class="p">,</span> <span class="n">semantic_list</span> <span class="o">=</span> <span class="n">GEO_CLASSIFIER_SPATIAL_MAP</span><span class="p">[</span><span class="n">label</span><span class="p">]</span>
+            <span class="n">semantic_types_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">st</span><span class="p">:</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">st</span> <span class="ow">in</span> <span class="n">semantic_list</span><span class="p">}</span>
+            <span class="n">additional_meta</span><span class="p">[</span><span class="s2">&quot;geo_classifier&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">label</span><span class="p">,</span>
+                <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="n">geo_prediction</span><span class="p">[</span><span class="s2">&quot;confidence&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">geo_prediction</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;source&quot;</span><span class="p">,</span> <span class="s2">&quot;ml&quot;</span><span class="p">),</span>
+            <span class="p">}</span>
+
+    <span class="c1"># If geo prediction wasn&#39;t used, use regular identify_types</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">used_geo_prediction</span><span class="p">:</span>
+        <span class="n">structural_type</span><span class="p">,</span> <span class="n">semantic_types_dict</span><span class="p">,</span> <span class="n">additional_meta</span> <span class="o">=</span> <span class="n">identify_types</span><span class="p">(</span>
+            <span class="n">array</span><span class="p">,</span> <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">datamart_geo_data</span><span class="p">,</span> <span class="n">manual</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Log column type with source information</span>
+    <span class="k">if</span> <span class="n">used_geo_prediction</span><span class="p">:</span>
+        <span class="n">geo_info</span> <span class="o">=</span> <span class="n">additional_meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;geo_classifier&quot;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="n">geo_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">,</span> <span class="s2">&quot;unknown&quot;</span><span class="p">)</span>
+        <span class="n">confidence</span> <span class="o">=</span> <span class="n">geo_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;confidence&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">source</span> <span class="o">=</span> <span class="n">geo_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;source&quot;</span><span class="p">,</span> <span class="s2">&quot;ml&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Get sample values for logging (use stored samples if available)</span>
+        <span class="n">column_name</span> <span class="o">=</span> <span class="n">column_meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;unknown&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">geo_prediction</span> <span class="ow">and</span> <span class="s2">&quot;sample_values&quot;</span> <span class="ow">in</span> <span class="n">geo_prediction</span><span class="p">:</span>
+            <span class="n">sample_values</span> <span class="o">=</span> <span class="n">geo_prediction</span><span class="p">[</span><span class="s2">&quot;sample_values&quot;</span><span class="p">]</span>
+            <span class="n">samples_str</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">sample_values</span><span class="p">])</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Column type </span><span class="si">%s</span><span class="s2"> [</span><span class="si">%s</span><span class="s2">] (from geo_classifier: column=</span><span class="si">%r</span><span class="s2">, label=</span><span class="si">%s</span><span class="s2">, confidence=</span><span class="si">%.4f</span><span class="s2">, source=</span><span class="si">%s</span><span class="s2">, samples=[</span><span class="si">%s</span><span class="s2">])&quot;</span><span class="p">,</span>
+            <span class="n">structural_type</span><span class="p">,</span>
+            <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">semantic_types_dict</span><span class="p">),</span>
+            <span class="n">column_name</span><span class="p">,</span>
+            <span class="n">label</span><span class="p">,</span>
+            <span class="n">confidence</span><span class="p">,</span>
+            <span class="n">source</span><span class="p">,</span>
+            <span class="n">samples_str</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Column type </span><span class="si">%s</span><span class="s2"> [</span><span class="si">%s</span><span class="s2">]&quot;</span><span class="p">,</span>
+            <span class="n">structural_type</span><span class="p">,</span>
+            <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">semantic_types_dict</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Set structural type</span>
+    <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;structural_type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">structural_type</span>
+    <span class="c1"># Add semantic types to the ones already present</span>
+    <span class="n">sem_types</span> <span class="o">=</span> <span class="n">column_meta</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;semantic_types&quot;</span><span class="p">,</span> <span class="p">[])</span>
+    <span class="k">for</span> <span class="n">sem_type</span> <span class="ow">in</span> <span class="n">semantic_types_dict</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">sem_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">sem_types</span><span class="p">:</span>
+            <span class="n">sem_types</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sem_type</span><span class="p">)</span>
+    <span class="c1"># Insert additional metadata</span>
+    <span class="n">column_meta</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">additional_meta</span><span class="p">)</span>
+
+    <span class="c1"># Resolved values are returned so they can be used again to compute spatial</span>
+    <span class="c1"># coverage</span>
+    <span class="n">resolved</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># Compute ranges for numerical data</span>
+    <span class="k">if</span> <span class="n">structural_type</span> <span class="ow">in</span> <span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">INTEGER</span><span class="p">,</span> <span class="n">types</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">coverage</span> <span class="ow">or</span> <span class="n">plots</span><span class="p">):</span>
+        <span class="c1"># Get numerical values needed for either ranges or plot</span>
+        <span class="n">numerical_values</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">array</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">e</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="o">-</span><span class="mf">3.4e38</span> <span class="o">&lt;</span> <span class="n">e</span> <span class="o">&lt;</span> <span class="mf">3.4e38</span><span class="p">:</span>  <span class="c1"># Overflows in ES</span>
+                    <span class="n">numerical_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+
+        <span class="c1"># Compute ranges from numerical values</span>
+        <span class="k">if</span> <span class="n">coverage</span><span class="p">:</span>
+            <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;mean&quot;</span><span class="p">],</span> <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;stddev&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">mean_stddev</span><span class="p">(</span><span class="n">numerical_values</span><span class="p">)</span>
+
+            <span class="n">ranges</span> <span class="o">=</span> <span class="n">get_numerical_ranges</span><span class="p">(</span><span class="n">numerical_values</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">ranges</span><span class="p">:</span>
+                <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;coverage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ranges</span>
+
+        <span class="c1"># Compute histogram from numerical values</span>
+        <span class="k">if</span> <span class="n">plots</span><span class="p">:</span>
+            <span class="n">counts</span><span class="p">,</span> <span class="n">edges</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">histogram</span><span class="p">(</span>
+                <span class="n">numerical_values</span><span class="p">,</span>
+                <span class="n">bins</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">counts</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">counts</span><span class="p">]</span>
+            <span class="n">edges</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">edges</span><span class="p">]</span>
+            <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;plot&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;histogram_numerical&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">[</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="n">count</span><span class="p">,</span>
+                        <span class="s2">&quot;bin_start&quot;</span><span class="p">:</span> <span class="n">edges</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                        <span class="s2">&quot;bin_end&quot;</span><span class="p">:</span> <span class="n">edges</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">],</span>
+                    <span class="p">}</span>
+                    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">counts</span><span class="p">)</span>
+                <span class="p">],</span>
+            <span class="p">}</span>
+
+    <span class="k">if</span> <span class="n">types</span><span class="o">.</span><span class="n">DATE_TIME</span> <span class="ow">in</span> <span class="n">semantic_types_dict</span><span class="p">:</span>
+        <span class="n">datetimes</span> <span class="o">=</span> <span class="n">semantic_types_dict</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">DATE_TIME</span><span class="p">]</span>
+        <span class="n">resolved</span><span class="p">[</span><span class="s2">&quot;datetimes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">datetimes</span>
+        <span class="n">timestamps</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">datetimes</span><span class="p">),</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;float32&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">dt</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">datetimes</span><span class="p">):</span>
+            <span class="n">timestamps</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">dt</span><span class="o">.</span><span class="n">timestamp</span><span class="p">()</span>
+        <span class="n">resolved</span><span class="p">[</span><span class="s2">&quot;timestamps&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">timestamps</span>
+
+        <span class="c1"># Compute histogram from temporal values</span>
+        <span class="k">if</span> <span class="n">plots</span> <span class="ow">and</span> <span class="s2">&quot;plot&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">column_meta</span><span class="p">:</span>
+            <span class="n">counts</span><span class="p">,</span> <span class="n">edges</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">histogram</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+            <span class="n">counts</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">counts</span><span class="p">]</span>
+            <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;plot&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;histogram_temporal&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">[</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="n">count</span><span class="p">,</span>
+                        <span class="s2">&quot;date_start&quot;</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcfromtimestamp</span><span class="p">(</span>
+                            <span class="nb">float</span><span class="p">(</span><span class="n">edges</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span>
+                        <span class="p">)</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
+                        <span class="s2">&quot;date_end&quot;</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcfromtimestamp</span><span class="p">(</span>
+                            <span class="nb">float</span><span class="p">(</span><span class="n">edges</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]),</span>
+                        <span class="p">)</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
+                    <span class="p">}</span>
+                    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">counts</span><span class="p">)</span>
+                <span class="p">],</span>
+            <span class="p">}</span>
+
+    <span class="c1"># Compute histogram from categorical values</span>
+    <span class="k">if</span> <span class="n">plots</span> <span class="ow">and</span> <span class="n">types</span><span class="o">.</span><span class="n">CATEGORICAL</span> <span class="ow">in</span> <span class="n">semantic_types_dict</span><span class="p">:</span>
+        <span class="n">counter</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">Counter</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">array</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">value</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">counter</span><span class="p">[</span><span class="n">value</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">counter</span><span class="o">.</span><span class="n">most_common</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">counts</span><span class="p">)</span>
+        <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;plot&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;histogram_categorical&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;bin&quot;</span><span class="p">:</span> <span class="n">value</span><span class="p">,</span>
+                    <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="n">count</span><span class="p">,</span>
+                <span class="p">}</span>
+                <span class="k">for</span> <span class="n">value</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">counts</span>
+            <span class="p">],</span>
+        <span class="p">}</span>
+
+    <span class="c1"># Compute histogram from textual values</span>
+    <span class="k">if</span> <span class="n">plots</span> <span class="ow">and</span> <span class="n">types</span><span class="o">.</span><span class="n">TEXT</span> <span class="ow">in</span> <span class="n">semantic_types_dict</span> <span class="ow">and</span> <span class="s2">&quot;plot&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">column_meta</span><span class="p">:</span>
+        <span class="n">counter</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">Counter</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">array</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">_re_word_split</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+                <span class="n">word</span> <span class="o">=</span> <span class="n">word</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">word</span><span class="p">:</span>
+                    <span class="n">counter</span><span class="p">[</span><span class="n">word</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">counter</span><span class="o">.</span><span class="n">most_common</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+        <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;plot&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;histogram_text&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;bin&quot;</span><span class="p">:</span> <span class="n">value</span><span class="p">,</span>
+                    <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="n">count</span><span class="p">,</span>
+                <span class="p">}</span>
+                <span class="k">for</span> <span class="n">value</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">counts</span>
+            <span class="p">],</span>
+        <span class="p">}</span>
+
+    <span class="c1"># Resolve addresses into coordinates</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">nominatim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="ow">and</span> <span class="n">structural_type</span> <span class="o">==</span> <span class="n">types</span><span class="o">.</span><span class="n">TEXT</span>
+        <span class="ow">and</span> <span class="n">types</span><span class="o">.</span><span class="n">TEXT</span> <span class="ow">in</span> <span class="n">semantic_types_dict</span>
+        <span class="ow">and</span> <span class="n">types</span><span class="o">.</span><span class="n">ADMIN</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">semantic_types_dict</span>
+    <span class="p">):</span>
+        <span class="n">locations</span><span class="p">,</span> <span class="n">non_empty</span> <span class="o">=</span> <span class="n">nominatim_resolve_all</span><span class="p">(</span>
+            <span class="n">nominatim</span><span class="p">,</span>
+            <span class="n">array</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">non_empty</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">unclean_ratio</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span> <span class="o">/</span> <span class="n">non_empty</span>
+            <span class="k">if</span> <span class="n">unclean_ratio</span> <span class="o">&lt;=</span> <span class="n">MAX_UNCLEAN_ADDRESSES</span><span class="p">:</span>
+                <span class="n">resolved</span><span class="p">[</span><span class="s2">&quot;addresses&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">locations</span>
+                <span class="k">if</span> <span class="n">types</span><span class="o">.</span><span class="n">ADDRESS</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;semantic_types&quot;</span><span class="p">]:</span>
+                    <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;semantic_types&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">ADDRESS</span><span class="p">)</span>
+
+    <span class="c1"># Set level of administrative areas</span>
+    <span class="k">if</span> <span class="n">types</span><span class="o">.</span><span class="n">ADMIN</span> <span class="ow">in</span> <span class="n">semantic_types_dict</span><span class="p">:</span>
+        <span class="n">admin_value</span> <span class="o">=</span> <span class="n">semantic_types_dict</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">admin_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># disambiguate_admin_areas returns (level, areas) tuple or just areas</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">admin_value</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">admin_value</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">level</span><span class="p">,</span> <span class="n">areas</span> <span class="o">=</span> <span class="n">admin_value</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Fallback: admin_value is just the areas list</span>
+                <span class="n">level</span><span class="p">,</span> <span class="n">areas</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">admin_value</span>
+            <span class="k">if</span> <span class="n">level</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;admin_area_level&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">level</span>
+            <span class="n">resolved</span><span class="p">[</span><span class="s2">&quot;admin_areas&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">areas</span>
+
+    <span class="k">return</span> <span class="n">resolved</span></div>
+
+
+
+<div class="viewcode-block" id="process_dataset">
+<a class="viewcode-back" href="../../api.html#atlas_profiler.process_dataset">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">process_dataset</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">,</span>
+    <span class="n">geo_classifier</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">geo_classifier_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">include_sample</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">coverage</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">plots</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">indexes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">load_max_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">nominatim</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">datamart_geo_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute all metafeatures from a dataset.</span>
+
+<span class="sd">    :param data: path to dataset, or file object, or DataFrame</span>
+<span class="sd">    :param geo_classifier: ``True`` to enable geo_classifier</span>
+<span class="sd">    :param geo_classifier_threshold: Confidence threshold for geo_classifier</span>
+<span class="sd">        predictions (default: 0.85). Predictions below this threshold will be</span>
+<span class="sd">        treated as &quot;non_spatial&quot;.</span>
+<span class="sd">    :param include_sample: Set to True to include a few random rows to the</span>
+<span class="sd">        result. Useful to present to a user.</span>
+<span class="sd">    :param coverage: Whether to compute data ranges</span>
+<span class="sd">    :param plots: Whether to compute plots</span>
+<span class="sd">    :param indexes: Whether to include indexes. If True (the default), the</span>
+<span class="sd">        input is a DataFrame, and it has index(es) different from the default</span>
+<span class="sd">        range, they will appear in the result with the columns.</span>
+<span class="sd">    :param load_max_size (bytes): Target size of the data to be analyzed. The data will</span>
+<span class="sd">        be randomly sampled if it is bigger. Defaults to `MAX_SIZE`, currently</span>
+<span class="sd">        5 MB (5000000). This is different from the sample data included in the result.</span>
+<span class="sd">    :param metadata: The metadata provided by the discovery plugin (might be</span>
+<span class="sd">        very limited).</span>
+<span class="sd">    :param nominatim: URL of the Nominatim server</span>
+<span class="sd">    :param datamart_geo_data: ``True`` or a datamart_geo.GeoData instance to use to</span>
+<span class="sd">        resolve named administrative territorial entities</span>
+<span class="sd">    :return: JSON structure (dict)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Track runtime for each pipeline step</span>
+    <span class="n">pipeline_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+    <span class="n">step_times</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">if</span> <span class="s2">&quot;sample_size&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;Argument &#39;sample_size&#39; is deprecated, use &#39;load_max_size&#39;&quot;</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">load_max_size</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;sample_size&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;process_dataset() got unexpected keyword argument </span><span class="si">%r</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">kwargs</span><span class="p">))</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">datamart_geo_data</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">datamart_geo</span><span class="w"> </span><span class="kn">import</span> <span class="n">GeoData</span>
+
+        <span class="n">datamart_geo_data</span> <span class="o">=</span> <span class="n">GeoData</span><span class="o">.</span><span class="n">from_local_cache</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">geo_classifier</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">geo_classifier</span> <span class="o">=</span> <span class="n">HybridGeoClassifier</span><span class="p">(</span><span class="n">GeoClassifier</span><span class="p">())</span>
+
+    <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># =========================================================================</span>
+    <span class="c1"># STEP 1: Load data</span>
+    <span class="c1"># =========================================================================</span>
+    <span class="n">step_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[STEP 1/6] Loading data...&quot;</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">data</span><span class="p">,</span> <span class="n">file_metadata</span><span class="p">,</span> <span class="n">column_names</span><span class="p">,</span> <span class="n">full_data_stats</span> <span class="o">=</span> <span class="n">load_data</span><span class="p">(</span>
+            <span class="n">data</span><span class="p">,</span>
+            <span class="n">load_max_size</span><span class="o">=</span><span class="n">load_max_size</span><span class="p">,</span>
+            <span class="n">indexes</span><span class="o">=</span><span class="n">indexes</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="n">EmptyDataError</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Dataframe is empty!&quot;</span><span class="p">)</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;nb_rows&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;nb_profiled_rows&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;columns&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;types&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="n">metadata</span>
+
+    <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;1_load_data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">step_start</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">&quot;[STEP 1/6] Data loaded in </span><span class="si">%.3f</span><span class="s2">s (</span><span class="si">%d</span><span class="s2"> rows, </span><span class="si">%d</span><span class="s2"> columns)&quot;</span><span class="p">,</span>
+        <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;1_load_data&quot;</span><span class="p">],</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+    <span class="p">)</span>
+
+    <span class="n">metadata</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">file_metadata</span><span class="p">)</span>
+    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;nb_profiled_rows&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;nb_columns&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="s2">&quot;columns&quot;</span> <span class="ow">in</span> <span class="n">metadata</span><span class="p">:</span>
+        <span class="n">columns</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;columns&quot;</span><span class="p">]</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using provided columns info&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">columns</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">columns</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Column metadata doesn&#39;t match number of columns&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">column_meta</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">columns</span><span class="p">,</span> <span class="n">column_names</span><span class="p">):</span>
+            <span class="k">if</span> <span class="s2">&quot;name&quot;</span> <span class="ow">in</span> <span class="n">column_meta</span> <span class="ow">and</span> <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">name</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Column names don&#39;t match&quot;</span><span class="p">)</span>
+            <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">name</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Setting column names from header&quot;</span><span class="p">)</span>
+        <span class="n">columns</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">}</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">column_names</span><span class="p">]</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;columns&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">columns</span>
+
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;0 rows, returning early&quot;</span><span class="p">)</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;types&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="n">metadata</span>
+
+    <span class="c1"># Get manual updates from the user</span>
+    <span class="n">manual_columns</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="s2">&quot;manual_annotations&quot;</span> <span class="ow">in</span> <span class="n">metadata</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">&quot;columns&quot;</span> <span class="ow">in</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;manual_annotations&quot;</span><span class="p">]:</span>
+            <span class="n">manual_columns</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]:</span> <span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;manual_annotations&quot;</span><span class="p">][</span><span class="s2">&quot;columns&quot;</span><span class="p">]</span>
+            <span class="p">}</span>
+
+    <span class="c1"># Cache some values that have been resolved for type identification but are</span>
+    <span class="c1"># useful for spatial coverage computation: admin areas and addresses</span>
+    <span class="c1"># Having to resolve them once to see if they&#39;re valid and a second time to</span>
+    <span class="c1"># build coverage information would be too slow</span>
+    <span class="n">resolved_columns</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># =========================================================================</span>
+    <span class="c1"># STEP 2: Batch ML prediction for ALL columns (single forward pass!)</span>
+    <span class="c1"># =========================================================================</span>
+    <span class="n">step_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[STEP 2/6] Geo classifier batch prediction...&quot;</span><span class="p">)</span>
+
+    <span class="n">geo_predictions</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># column_idx -&gt; prediction dict</span>
+
+    <span class="k">if</span> <span class="n">geo_classifier</span><span class="p">:</span>
+        <span class="c1"># Collect samples from all columns (no manual override)</span>
+        <span class="c1"># Use pre-extracted sample values from full dataset (before sampling)</span>
+        <span class="n">columns_for_batch</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">column_idx</span><span class="p">,</span> <span class="n">column_meta</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">columns</span><span class="p">):</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">manual_columns</span><span class="p">:</span>
+                <span class="k">continue</span>  <span class="c1"># Skip columns with manual annotations</span>
+
+            <span class="c1"># Use pre-extracted sample values from full dataset</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">full_data_stats</span> <span class="ow">and</span> <span class="s2">&quot;sample_values&quot;</span> <span class="ow">in</span> <span class="n">full_data_stats</span><span class="p">[</span><span class="n">name</span><span class="p">]:</span>
+                <span class="n">sample_values</span> <span class="o">=</span> <span class="n">full_data_stats</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s2">&quot;sample_values&quot;</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">sample_values</span><span class="p">:</span>
+                    <span class="n">columns_for_batch</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">column_idx</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">sample_values</span><span class="p">))</span>
+
+        <span class="c1"># BATCH PREDICTION - single forward pass for ALL columns!</span>
+        <span class="k">if</span> <span class="n">columns_for_batch</span><span class="p">:</span>
+            <span class="n">batch_inputs</span> <span class="o">=</span> <span class="p">[(</span><span class="n">name</span><span class="p">,</span> <span class="n">vals</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">vals</span> <span class="ow">in</span> <span class="n">columns_for_batch</span><span class="p">]</span>
+            <span class="n">batch_results</span> <span class="o">=</span> <span class="n">geo_classifier</span><span class="o">.</span><span class="n">predict_batch</span><span class="p">(</span>
+                <span class="n">batch_inputs</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">geo_classifier_threshold</span>
+            <span class="p">)</span>
+
+            <span class="k">for</span> <span class="p">(</span><span class="n">column_idx</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">sample_values</span><span class="p">),</span> <span class="n">prediction</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                <span class="n">columns_for_batch</span><span class="p">,</span> <span class="n">batch_results</span>
+            <span class="p">):</span>
+                <span class="c1"># Store prediction with sample values used</span>
+                <span class="n">geo_predictions</span><span class="p">[</span><span class="n">column_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">prediction</span>
+                <span class="n">geo_predictions</span><span class="p">[</span><span class="n">column_idx</span><span class="p">][</span><span class="s2">&quot;sample_values&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sample_values</span>
+
+    <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;2_geo_batch_predict&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">step_start</span>
+
+    <span class="c1"># Incrementally save geo attributes to CSV</span>
+    <span class="k">if</span> <span class="n">geo_predictions</span><span class="p">:</span>
+        <span class="n">geo_results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">col_idx</span><span class="p">,</span> <span class="n">prediction</span> <span class="ow">in</span> <span class="n">geo_predictions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">column_meta</span> <span class="o">=</span> <span class="n">columns</span><span class="p">[</span><span class="n">col_idx</span><span class="p">]</span>
+            <span class="n">prediction</span> <span class="o">=</span> <span class="n">geo_predictions</span><span class="p">[</span><span class="n">col_idx</span><span class="p">]</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="n">prediction</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">,</span> <span class="s2">&quot;non_spatial&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;non_spatial&quot;</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">col_name</span> <span class="o">=</span> <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+            <span class="n">geo_results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">col_name</span><span class="p">,</span>
+                    <span class="s2">&quot;values&quot;</span><span class="p">:</span> <span class="n">prediction</span><span class="p">[</span><span class="s2">&quot;sample_values&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">label</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">geo_results</span><span class="p">:</span>
+            <span class="n">geo_df</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">geo_results</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="s2">&quot;output/geo_classifier_results.csv&quot;</span><span class="p">):</span>
+                <span class="n">mode</span> <span class="o">=</span> <span class="s2">&quot;a&quot;</span>
+                <span class="n">header</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="s2">&quot;output&quot;</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">mode</span> <span class="o">=</span> <span class="s2">&quot;w&quot;</span>
+                <span class="n">header</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">geo_df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span>
+                <span class="s2">&quot;output/geo_classifier_results.csv&quot;</span><span class="p">,</span>
+                <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">mode</span><span class="o">=</span><span class="n">mode</span><span class="p">,</span>
+                <span class="n">header</span><span class="o">=</span><span class="n">header</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">&quot;Saved </span><span class="si">%d</span><span class="s2"> geo classifier results to output/geo_classifier_results.csv&quot;</span><span class="p">,</span>
+                <span class="nb">len</span><span class="p">(</span><span class="n">geo_results</span><span class="p">),</span>
+            <span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">&quot;[STEP 2/6] Geo batch prediction completed in </span><span class="si">%.3f</span><span class="s2">s (</span><span class="si">%d</span><span class="s2"> columns)&quot;</span><span class="p">,</span>
+        <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;2_geo_batch_predict&quot;</span><span class="p">],</span>
+        <span class="nb">len</span><span class="p">(</span><span class="n">geo_predictions</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="c1"># =========================================================================</span>
+    <span class="c1"># STEP 3: Process columns (apply predictions + compute features)</span>
+    <span class="c1"># =========================================================================</span>
+    <span class="n">step_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[STEP 3/6] Processing </span><span class="si">%d</span><span class="s2"> columns...&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">columns</span><span class="p">))</span>
+
+    <span class="k">for</span> <span class="n">col_idx</span><span class="p">,</span> <span class="n">column_meta</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">columns</span><span class="p">):</span>
+        <span class="n">resolved</span> <span class="o">=</span> <span class="n">process_column</span><span class="p">(</span>
+            <span class="n">data</span><span class="p">[</span><span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]],</span>
+            <span class="n">column_meta</span><span class="p">,</span>
+            <span class="n">manual</span><span class="o">=</span><span class="n">manual_columns</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]),</span>
+            <span class="n">plots</span><span class="o">=</span><span class="n">plots</span><span class="p">,</span>
+            <span class="n">coverage</span><span class="o">=</span><span class="n">coverage</span><span class="p">,</span>
+            <span class="n">datamart_geo_data</span><span class="o">=</span><span class="n">datamart_geo_data</span><span class="p">,</span>
+            <span class="n">nominatim</span><span class="o">=</span><span class="n">nominatim</span><span class="p">,</span>
+            <span class="n">geo_prediction</span><span class="o">=</span><span class="n">geo_predictions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">col_idx</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">resolved_columns</span><span class="p">[</span><span class="n">col_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">resolved</span>
+
+        <span class="c1"># Override with exact stats from full data (computed before sampling)</span>
+        <span class="n">col_name</span> <span class="o">=</span> <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">col_name</span> <span class="ow">in</span> <span class="n">full_data_stats</span><span class="p">:</span>
+            <span class="n">stats</span> <span class="o">=</span> <span class="n">full_data_stats</span><span class="p">[</span><span class="n">col_name</span><span class="p">]</span>
+            <span class="k">if</span> <span class="s2">&quot;num_distinct_values&quot;</span> <span class="ow">in</span> <span class="n">column_meta</span><span class="p">:</span>
+                <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;num_distinct_values&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="s2">&quot;num_distinct_values&quot;</span><span class="p">]</span>
+
+    <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;3_process_columns&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">step_start</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">&quot;[STEP 3/6] Column processing completed in </span><span class="si">%.3f</span><span class="s2">s&quot;</span><span class="p">,</span>
+        <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;3_process_columns&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+
+    <span class="c1"># =========================================================================</span>
+    <span class="c1"># STEP 4: Pair lat/long columns and determine dataset types</span>
+    <span class="c1"># =========================================================================</span>
+    <span class="n">step_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[STEP 4/6] Pairing lat/long columns and determining dataset types...&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Pair lat &amp; long columns</span>
+    <span class="n">columns_lat</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">LatLongColumn</span><span class="p">(</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">col_idx</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+            <span class="n">annot_pair</span><span class="o">=</span><span class="n">manual_columns</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;latlong_pair&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">col_idx</span><span class="p">,</span> <span class="n">col</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">columns</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">types</span><span class="o">.</span><span class="n">LATITUDE</span> <span class="ow">in</span> <span class="n">col</span><span class="p">[</span><span class="s2">&quot;semantic_types&quot;</span><span class="p">]</span>
+    <span class="p">]</span>
+    <span class="n">columns_long</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">LatLongColumn</span><span class="p">(</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">col_idx</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+            <span class="n">annot_pair</span><span class="o">=</span><span class="n">manual_columns</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;latlong_pair&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">col_idx</span><span class="p">,</span> <span class="n">col</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">columns</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">types</span><span class="o">.</span><span class="n">LONGITUDE</span> <span class="ow">in</span> <span class="n">col</span><span class="p">[</span><span class="s2">&quot;semantic_types&quot;</span><span class="p">]</span>
+    <span class="p">]</span>
+    <span class="n">latlong_pairs</span><span class="p">,</span> <span class="p">(</span><span class="n">missed_lat</span><span class="p">,</span> <span class="n">missed_long</span><span class="p">)</span> <span class="o">=</span> <span class="n">pair_latlong_columns</span><span class="p">(</span>
+        <span class="n">columns_lat</span><span class="p">,</span> <span class="n">columns_long</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Log missed columns</span>
+    <span class="k">if</span> <span class="n">missed_lat</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unmatched latitude columns: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">missed_lat</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">missed_long</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unmatched longitude columns: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">missed_long</span><span class="p">)</span>
+
+    <span class="c1"># Remove semantic type from unpaired columns</span>
+    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">columns</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">missed_lat</span><span class="p">:</span>
+            <span class="n">col</span><span class="p">[</span><span class="s2">&quot;semantic_types&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">LATITUDE</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">missed_long</span><span class="p">:</span>
+            <span class="n">col</span><span class="p">[</span><span class="s2">&quot;semantic_types&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">LONGITUDE</span><span class="p">)</span>
+
+    <span class="c1"># Identify the overall dataset types (numerical, categorical, spatial, or temporal)</span>
+    <span class="n">dataset_types</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">Counter</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">column_meta</span> <span class="ow">in</span> <span class="n">columns</span><span class="p">:</span>
+        <span class="n">dataset_type</span> <span class="o">=</span> <span class="n">determine_dataset_type</span><span class="p">(</span>
+            <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;structural_type&quot;</span><span class="p">],</span>
+            <span class="n">column_meta</span><span class="p">[</span><span class="s2">&quot;semantic_types&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">dataset_type</span><span class="p">:</span>
+            <span class="n">dataset_types</span><span class="p">[</span><span class="n">dataset_type</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">d_type</span> <span class="ow">in</span> <span class="p">[</span>
+        <span class="p">(</span><span class="s2">&quot;nb_spatial_columns&quot;</span><span class="p">,</span> <span class="n">types</span><span class="o">.</span><span class="n">DATASET_SPATIAL</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;nb_temporal_columns&quot;</span><span class="p">,</span> <span class="n">types</span><span class="o">.</span><span class="n">DATASET_TEMPORAL</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;nb_categorical_columns&quot;</span><span class="p">,</span> <span class="n">types</span><span class="o">.</span><span class="n">DATASET_CATEGORICAL</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;nb_numerical_columns&quot;</span><span class="p">,</span> <span class="n">types</span><span class="o">.</span><span class="n">DATASET_NUMERICAL</span><span class="p">),</span>
+    <span class="p">]:</span>
+        <span class="k">if</span> <span class="n">dataset_types</span><span class="p">[</span><span class="n">d_type</span><span class="p">]:</span>
+            <span class="n">metadata</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataset_types</span><span class="p">[</span><span class="n">d_type</span><span class="p">]</span>
+    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;types&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">dataset_types</span><span class="p">))</span>
+
+    <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;4_latlong_pairing&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">step_start</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">&quot;[STEP 4/6] Lat/long pairing completed in </span><span class="si">%.3f</span><span class="s2">s (</span><span class="si">%d</span><span class="s2"> pairs found)&quot;</span><span class="p">,</span>
+        <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;4_latlong_pairing&quot;</span><span class="p">],</span>
+        <span class="nb">len</span><span class="p">(</span><span class="n">latlong_pairs</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="c1"># =========================================================================</span>
+    <span class="c1"># STEP 5: Compute spatial coverage</span>
+    <span class="c1"># =========================================================================</span>
+    <span class="n">step_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">coverage</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[STEP 5/6] Computing spatial coverage...&quot;</span><span class="p">)</span>
+        <span class="n">spatial_coverage</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">with</span> <span class="n">NoOpContext</span><span class="p">():</span>
+            <span class="c1"># Compute sketches from lat/long pairs</span>
+            <span class="k">for</span> <span class="n">col_lat</span><span class="p">,</span> <span class="n">col_long</span> <span class="ow">in</span> <span class="n">latlong_pairs</span><span class="p">:</span>
+                <span class="n">lat_values</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="n">col_lat</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
+                <span class="n">lat_values</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">lat_values</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">)</span>
+                <span class="n">long_values</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="n">col_long</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
+                <span class="n">long_values</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">long_values</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">)</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="o">~</span><span class="n">numpy</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">lat_values</span><span class="p">)</span>
+                    <span class="o">&amp;</span> <span class="o">~</span><span class="n">numpy</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">long_values</span><span class="p">)</span>
+                    <span class="o">&amp;</span> <span class="p">(</span><span class="o">-</span><span class="mf">90.0</span> <span class="o">&lt;</span> <span class="n">lat_values</span><span class="p">)</span>
+                    <span class="o">&amp;</span> <span class="p">(</span><span class="n">lat_values</span> <span class="o">&lt;</span> <span class="mf">90.0</span><span class="p">)</span>
+                    <span class="o">&amp;</span> <span class="p">(</span><span class="o">-</span><span class="mf">180.0</span> <span class="o">&lt;</span> <span class="n">long_values</span><span class="p">)</span>
+                    <span class="o">&amp;</span> <span class="p">(</span><span class="n">long_values</span> <span class="o">&lt;</span> <span class="mf">180.0</span><span class="p">)</span>
+                <span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                    <span class="n">lat_values</span> <span class="o">=</span> <span class="n">lat_values</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+                    <span class="n">long_values</span> <span class="o">=</span> <span class="n">long_values</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+                    <span class="n">values</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">lat_values</span><span class="p">,</span> <span class="n">long_values</span><span class="p">])</span><span class="o">.</span><span class="n">T</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="s2">&quot;Computing spatial sketch lat=</span><span class="si">%r</span><span class="s2"> long=</span><span class="si">%r</span><span class="s2"> (</span><span class="si">%d</span><span class="s2"> rows)&quot;</span><span class="p">,</span>
+                        <span class="n">col_lat</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                        <span class="n">col_long</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                        <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">),</span>
+                    <span class="p">)</span>
+                    <span class="c1"># Ranges</span>
+                    <span class="n">spatial_ranges</span> <span class="o">=</span> <span class="n">get_spatial_ranges</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+                    <span class="c1"># Geohashes</span>
+                    <span class="n">builder</span> <span class="o">=</span> <span class="n">Geohasher</span><span class="p">(</span><span class="n">number</span><span class="o">=</span><span class="n">MAX_GEOHASHES</span><span class="p">)</span>
+                    <span class="n">builder</span><span class="o">.</span><span class="n">add_points</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+                    <span class="n">hashes</span> <span class="o">=</span> <span class="n">builder</span><span class="o">.</span><span class="n">get_hashes_json</span><span class="p">()</span>
+
+                    <span class="n">spatial_coverage</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;latlong&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;column_names&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">col_lat</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">col_long</span><span class="o">.</span><span class="n">name</span><span class="p">],</span>
+                            <span class="s2">&quot;column_indexes&quot;</span><span class="p">:</span> <span class="p">[</span>
+                                <span class="n">col_lat</span><span class="o">.</span><span class="n">index</span><span class="p">,</span>
+                                <span class="n">col_long</span><span class="o">.</span><span class="n">index</span><span class="p">,</span>
+                            <span class="p">],</span>
+                            <span class="s2">&quot;geohashes4&quot;</span><span class="p">:</span> <span class="n">hashes</span><span class="p">,</span>
+                            <span class="s2">&quot;ranges&quot;</span><span class="p">:</span> <span class="n">spatial_ranges</span><span class="p">,</span>
+                            <span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">),</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+
+            <span class="c1"># Compute sketches from WKT points</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">col</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">columns</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">col</span><span class="p">[</span><span class="s2">&quot;structural_type&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">types</span><span class="o">.</span><span class="n">GEO_POINT</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">latlong</span> <span class="o">=</span> <span class="n">col</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;point_format&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;lat,long&quot;</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+                <span class="n">values</span> <span class="o">=</span> <span class="n">parse_wkt_column</span><span class="p">(</span>
+                    <span class="n">data</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="n">i</span><span class="p">],</span>
+                    <span class="n">latlong</span><span class="o">=</span><span class="n">latlong</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">total</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">x</span><span class="p">)))</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">total</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="s2">&quot;Most data points did not parse correctly as &quot;</span>
+                        <span class="s2">&quot;point (</span><span class="si">%s</span><span class="s2">) col=</span><span class="si">%d</span><span class="s2"> </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;lat,long&quot;</span> <span class="k">if</span> <span class="n">latlong</span> <span class="k">else</span> <span class="s2">&quot;long,lat&quot;</span><span class="p">,</span>
+                        <span class="n">i</span><span class="p">,</span>
+                        <span class="n">col</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="n">values</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="s2">&quot;Computing spatial sketches point=</span><span class="si">%r</span><span class="s2"> (</span><span class="si">%d</span><span class="s2"> rows)&quot;</span><span class="p">,</span>
+                        <span class="n">name</span><span class="p">,</span>
+                        <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">),</span>
+                    <span class="p">)</span>
+                    <span class="c1"># Ranges</span>
+                    <span class="n">spatial_ranges</span> <span class="o">=</span> <span class="n">get_spatial_ranges</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+                    <span class="c1"># Geohashes</span>
+                    <span class="n">builder</span> <span class="o">=</span> <span class="n">Geohasher</span><span class="p">(</span><span class="n">number</span><span class="o">=</span><span class="n">MAX_GEOHASHES</span><span class="p">)</span>
+                    <span class="n">builder</span><span class="o">.</span><span class="n">add_points</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+                    <span class="n">hashes</span> <span class="o">=</span> <span class="n">builder</span><span class="o">.</span><span class="n">get_hashes_json</span><span class="p">()</span>
+
+                    <span class="n">spatial_coverage</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;point_latlong&quot;</span> <span class="k">if</span> <span class="n">latlong</span> <span class="k">else</span> <span class="s2">&quot;point&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;column_names&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">name</span><span class="p">],</span>
+                            <span class="s2">&quot;column_indexes&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                            <span class="s2">&quot;geohashes4&quot;</span><span class="p">:</span> <span class="n">hashes</span><span class="p">,</span>
+                            <span class="s2">&quot;ranges&quot;</span><span class="p">:</span> <span class="n">spatial_ranges</span><span class="p">,</span>
+                            <span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">),</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">resolved</span> <span class="ow">in</span> <span class="n">resolved_columns</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="c1"># Compute sketches from addresses</span>
+                <span class="k">if</span> <span class="s2">&quot;addresses&quot;</span> <span class="ow">in</span> <span class="n">resolved</span><span class="p">:</span>
+                    <span class="n">locations</span> <span class="o">=</span> <span class="n">resolved</span><span class="p">[</span><span class="s2">&quot;addresses&quot;</span><span class="p">]</span>
+
+                    <span class="n">name</span> <span class="o">=</span> <span class="n">columns</span><span class="p">[</span><span class="n">idx</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="s2">&quot;Computing spatial sketches address=</span><span class="si">%r</span><span class="s2"> (</span><span class="si">%d</span><span class="s2"> rows)&quot;</span><span class="p">,</span>
+                        <span class="n">name</span><span class="p">,</span>
+                        <span class="nb">len</span><span class="p">(</span><span class="n">locations</span><span class="p">),</span>
+                    <span class="p">)</span>
+                    <span class="c1"># Ranges</span>
+                    <span class="n">spatial_ranges</span> <span class="o">=</span> <span class="n">get_spatial_ranges</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>
+                    <span class="c1"># Geohashes</span>
+                    <span class="n">builder</span> <span class="o">=</span> <span class="n">Geohasher</span><span class="p">(</span><span class="n">number</span><span class="o">=</span><span class="n">MAX_GEOHASHES</span><span class="p">)</span>
+                    <span class="n">builder</span><span class="o">.</span><span class="n">add_points</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>
+                    <span class="n">hashes</span> <span class="o">=</span> <span class="n">builder</span><span class="o">.</span><span class="n">get_hashes_json</span><span class="p">()</span>
+
+                    <span class="n">spatial_coverage</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;address&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;column_names&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">name</span><span class="p">],</span>
+                            <span class="s2">&quot;column_indexes&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+                            <span class="s2">&quot;geohashes4&quot;</span><span class="p">:</span> <span class="n">hashes</span><span class="p">,</span>
+                            <span class="s2">&quot;ranges&quot;</span><span class="p">:</span> <span class="n">spatial_ranges</span><span class="p">,</span>
+                            <span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">locations</span><span class="p">),</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+
+                <span class="c1"># Compute sketches from administrative areas</span>
+                <span class="k">if</span> <span class="s2">&quot;admin_areas&quot;</span> <span class="ow">in</span> <span class="n">resolved</span><span class="p">:</span>
+                    <span class="n">areas</span> <span class="o">=</span> <span class="n">resolved</span><span class="p">[</span><span class="s2">&quot;admin_areas&quot;</span><span class="p">]</span>
+
+                    <span class="n">name</span> <span class="o">=</span> <span class="n">columns</span><span class="p">[</span><span class="n">idx</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="s2">&quot;Computing spatial sketches admin_areas=</span><span class="si">%r</span><span class="s2"> (</span><span class="si">%d</span><span class="s2"> rows)&quot;</span><span class="p">,</span>
+                        <span class="n">name</span><span class="p">,</span>
+                        <span class="nb">len</span><span class="p">(</span><span class="n">areas</span><span class="p">),</span>
+                    <span class="p">)</span>
+                    <span class="n">cov</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;admin&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;column_names&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">name</span><span class="p">],</span>
+                        <span class="s2">&quot;column_indexes&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+                    <span class="p">}</span>
+
+                    <span class="c1"># Merge into a single range</span>
+                    <span class="n">merged</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="k">for</span> <span class="n">area</span> <span class="ow">in</span> <span class="n">areas</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">area</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="k">continue</span>
+                        <span class="n">new</span> <span class="o">=</span> <span class="n">area</span><span class="o">.</span><span class="n">bounds</span>
+                        <span class="k">if</span> <span class="n">new</span><span class="p">:</span>
+                            <span class="k">if</span> <span class="n">merged</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                                <span class="n">merged</span> <span class="o">=</span> <span class="n">new</span>
+                            <span class="k">else</span><span class="p">:</span>
+                                <span class="n">merged</span> <span class="o">=</span> <span class="p">(</span>
+                                    <span class="nb">min</span><span class="p">(</span><span class="n">merged</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">new</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+                                    <span class="nb">max</span><span class="p">(</span><span class="n">merged</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">new</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+                                    <span class="nb">min</span><span class="p">(</span><span class="n">merged</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">new</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span>
+                                    <span class="nb">max</span><span class="p">(</span><span class="n">merged</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">new</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span>
+                                <span class="p">)</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="n">merged</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                        <span class="ow">and</span> <span class="n">merged</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">merged</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.01</span>
+                        <span class="ow">and</span> <span class="n">merged</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">-</span> <span class="n">merged</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.01</span>
+                    <span class="p">):</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Computed bounding box&quot;</span><span class="p">)</span>
+                        <span class="n">cov</span><span class="p">[</span><span class="s2">&quot;ranges&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+                            <span class="p">{</span>
+                                <span class="s2">&quot;range&quot;</span><span class="p">:</span> <span class="p">{</span>
+                                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;envelope&quot;</span><span class="p">,</span>
+                                    <span class="s2">&quot;coordinates&quot;</span><span class="p">:</span> <span class="p">[</span>
+                                        <span class="p">[</span><span class="n">merged</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">merged</span><span class="p">[</span><span class="mi">3</span><span class="p">]],</span>
+                                        <span class="p">[</span><span class="n">merged</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">merged</span><span class="p">[</span><span class="mi">2</span><span class="p">]],</span>
+                                    <span class="p">],</span>
+                                <span class="p">},</span>
+                            <span class="p">},</span>
+                        <span class="p">]</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Couldn&#39;t build a bounding box&quot;</span><span class="p">)</span>
+
+                    <span class="c1"># Compute geohashes</span>
+                    <span class="n">builder</span> <span class="o">=</span> <span class="n">Geohasher</span><span class="p">(</span><span class="n">number</span><span class="o">=</span><span class="n">MAX_GEOHASHES</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">area</span> <span class="ow">in</span> <span class="n">areas</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">area</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">area</span><span class="o">.</span><span class="n">bounds</span><span class="p">:</span>
+                            <span class="k">continue</span>
+                        <span class="n">builder</span><span class="o">.</span><span class="n">add_aab</span><span class="p">(</span><span class="n">area</span><span class="o">.</span><span class="n">bounds</span><span class="p">)</span>
+                    <span class="n">hashes</span> <span class="o">=</span> <span class="n">builder</span><span class="o">.</span><span class="n">get_hashes_json</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">hashes</span><span class="p">:</span>
+                        <span class="n">cov</span><span class="p">[</span><span class="s2">&quot;geohashes4&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">hashes</span>
+
+                    <span class="c1"># Count</span>
+                    <span class="n">cov</span><span class="p">[</span><span class="s2">&quot;number&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">builder</span><span class="o">.</span><span class="n">total</span>
+
+                    <span class="k">if</span> <span class="s2">&quot;ranges&quot;</span> <span class="ow">in</span> <span class="n">cov</span> <span class="ow">or</span> <span class="s2">&quot;geohashes4&quot;</span> <span class="ow">in</span> <span class="n">cov</span><span class="p">:</span>
+                        <span class="n">spatial_coverage</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cov</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">spatial_coverage</span><span class="p">:</span>
+            <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;spatial_coverage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">spatial_coverage</span>
+
+        <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;5_spatial_coverage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">step_start</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;[STEP 5/6] Spatial coverage completed in </span><span class="si">%.3f</span><span class="s2">s (</span><span class="si">%d</span><span class="s2"> coverage entries)&quot;</span><span class="p">,</span>
+            <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;5_spatial_coverage&quot;</span><span class="p">],</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">spatial_coverage</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="c1"># =====================================================================</span>
+        <span class="c1"># STEP 6: Compute temporal coverage</span>
+        <span class="c1"># =====================================================================</span>
+        <span class="n">step_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[STEP 6/6] Computing temporal coverage...&quot;</span><span class="p">)</span>
+        <span class="n">temporal_coverage</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">with</span> <span class="n">NoOpContext</span><span class="p">():</span>
+            <span class="c1"># Datetime columns</span>
+            <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">col</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">columns</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">types</span><span class="o">.</span><span class="n">DATE_TIME</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">col</span><span class="p">[</span><span class="s2">&quot;semantic_types&quot;</span><span class="p">]:</span>
+                    <span class="k">continue</span>
+                <span class="n">datetimes</span> <span class="o">=</span> <span class="n">resolved_columns</span><span class="p">[</span><span class="n">idx</span><span class="p">][</span><span class="s2">&quot;datetimes&quot;</span><span class="p">]</span>
+                <span class="n">timestamps</span> <span class="o">=</span> <span class="n">resolved_columns</span><span class="p">[</span><span class="n">idx</span><span class="p">][</span><span class="s2">&quot;timestamps&quot;</span><span class="p">]</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="s2">&quot;Computing temporal ranges datetime=</span><span class="si">%r</span><span class="s2"> (</span><span class="si">%d</span><span class="s2"> rows)&quot;</span><span class="p">,</span>
+                    <span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                    <span class="nb">len</span><span class="p">(</span><span class="n">datetimes</span><span class="p">),</span>
+                <span class="p">)</span>
+
+                <span class="c1"># Get temporal ranges</span>
+                <span class="n">ranges</span> <span class="o">=</span> <span class="n">get_numerical_ranges</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">ranges</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+                <span class="c1"># Get temporal resolution</span>
+                <span class="n">resolution</span> <span class="o">=</span> <span class="n">get_temporal_resolution</span><span class="p">(</span><span class="n">datetimes</span><span class="p">)</span>
+
+                <span class="n">temporal_coverage</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;datetime&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;column_names&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]],</span>
+                        <span class="s2">&quot;column_indexes&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+                        <span class="s2">&quot;column_types&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">DATE_TIME</span><span class="p">],</span>
+                        <span class="s2">&quot;ranges&quot;</span><span class="p">:</span> <span class="n">ranges</span><span class="p">,</span>
+                        <span class="s2">&quot;temporal_resolution&quot;</span><span class="p">:</span> <span class="n">resolution</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+
+            <span class="c1"># TODO: Times split over multiple columns</span>
+
+        <span class="k">if</span> <span class="n">temporal_coverage</span><span class="p">:</span>
+            <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;temporal_coverage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">temporal_coverage</span>
+
+        <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;6_temporal_coverage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">step_start</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;[STEP 6/6] Temporal coverage completed in </span><span class="si">%.3f</span><span class="s2">s (</span><span class="si">%d</span><span class="s2"> coverage entries)&quot;</span><span class="p">,</span>
+            <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;6_temporal_coverage&quot;</span><span class="p">],</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">temporal_coverage</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;5_spatial_coverage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;6_temporal_coverage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[STEP 5-6/6] Coverage computation skipped (coverage=False)&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Attribute names</span>
+    <span class="n">attribute_keywords</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">columns</span><span class="p">:</span>
+        <span class="n">attribute_keywords</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">])</span>
+        <span class="n">kw</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">expand_attribute_name</span><span class="p">(</span><span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="n">kw</span> <span class="o">!=</span> <span class="p">[</span><span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]]:</span>
+            <span class="n">attribute_keywords</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">kw</span><span class="p">)</span>
+    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;attribute_keywords&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">attribute_keywords</span>
+
+    <span class="c1"># Sample data</span>
+    <span class="k">if</span> <span class="n">include_sample</span><span class="p">:</span>
+        <span class="n">step_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="n">rand</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="n">RANDOM_SEED</span><span class="p">)</span>
+        <span class="n">choose_rows</span> <span class="o">=</span> <span class="n">rand</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+            <span class="nb">min</span><span class="p">(</span><span class="n">SAMPLE_ROWS</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)),</span>
+            <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">choose_rows</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>  <span class="c1"># Keep it in order</span>
+        <span class="n">sample</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">choose_rows</span><span class="p">]</span>
+        <span class="n">sample</span> <span class="o">=</span> <span class="n">sample</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">truncate_string</span><span class="p">)</span>  <span class="c1"># Truncate long values</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;sample&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sample</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">lineterminator</span><span class="o">=</span><span class="s2">&quot;</span><span class="se">\r\n</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">step_times</span><span class="p">[</span><span class="s2">&quot;sample_extraction&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">step_start</span>
+
+    <span class="c1"># =========================================================================</span>
+    <span class="c1"># PIPELINE SUMMARY</span>
+    <span class="c1"># =========================================================================</span>
+    <span class="n">total_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">pipeline_start</span>
+
+    <span class="c1"># Build summary string</span>
+    <span class="n">summary_parts</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="si">{</span><span class="s1">&#39;=&#39;</span><span class="o">*</span><span class="mi">60</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span>
+    <span class="n">summary_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;PROFILING PIPELINE SUMMARY&quot;</span><span class="p">)</span>
+    <span class="n">summary_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;=&#39;</span><span class="o">*</span><span class="mi">60</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">summary_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dataset: </span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> rows × </span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> columns&quot;</span><span class="p">)</span>
+    <span class="n">summary_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;-&#39;</span><span class="o">*</span><span class="mi">60</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">step_name</span><span class="p">,</span> <span class="n">step_time</span> <span class="ow">in</span> <span class="n">step_times</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">pct</span> <span class="o">=</span> <span class="p">(</span><span class="n">step_time</span> <span class="o">/</span> <span class="n">total_time</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)</span> <span class="k">if</span> <span class="n">total_time</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="n">bar_len</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">pct</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>  <span class="c1"># 50 chars = 100%</span>
+        <span class="n">bar</span> <span class="o">=</span> <span class="s2">&quot;█&quot;</span> <span class="o">*</span> <span class="n">bar_len</span> <span class="o">+</span> <span class="s2">&quot;░&quot;</span> <span class="o">*</span> <span class="p">(</span><span class="mi">50</span> <span class="o">-</span> <span class="n">bar_len</span><span class="p">)</span>
+        <span class="n">summary_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">step_name</span><span class="si">:</span><span class="s2">25s</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">step_time</span><span class="si">:</span><span class="s2">7.3f</span><span class="si">}</span><span class="s2">s (</span><span class="si">{</span><span class="n">pct</span><span class="si">:</span><span class="s2">5.1f</span><span class="si">}</span><span class="s2">%) </span><span class="si">{</span><span class="n">bar</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">summary_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;-&#39;</span><span class="o">*</span><span class="mi">60</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">summary_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;TOTAL&#39;</span><span class="si">:</span><span class="s2">25s</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">total_time</span><span class="si">:</span><span class="s2">7.3f</span><span class="si">}</span><span class="s2">s&quot;</span><span class="p">)</span>
+    <span class="n">summary_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;=&#39;</span><span class="o">*</span><span class="mi">60</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">summary_parts</span><span class="p">))</span>
+
+    <span class="c1"># Also store timing in metadata for analysis</span>
+    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;_profiling_times&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;steps&quot;</span><span class="p">:</span> <span class="n">step_times</span><span class="p">,</span>
+        <span class="s2">&quot;total&quot;</span><span class="p">:</span> <span class="n">total_time</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">metadata</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Eden Wu.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
