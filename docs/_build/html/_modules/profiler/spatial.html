@@ -1,0 +1,1544 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>profiler.spatial &mdash; Atlas Profiler 0.0.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=e3a6060d"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            Atlas Profiler
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">Changelog</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Atlas Profiler</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">profiler.spatial</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for profiler.spatial</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.random</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.cluster</span><span class="w"> </span><span class="kn">import</span> <span class="n">KMeans</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceWarning</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.neighbors._kd_tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">KDTree</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">typing</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">urlencode</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.warning_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">ignore_warnings</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nn</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn.functional</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">F</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoConfig</span><span class="p">,</span> <span class="n">AutoModel</span><span class="p">,</span> <span class="n">AutoTokenizer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="c1"># Model download configuration - individual file URLs from NYU Box</span>
+<span class="n">GEO_MODEL_FILES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;model.pt&quot;</span><span class="p">:</span> <span class="s2">&quot;https://nyu.box.com/shared/static/1houlci416spy0oeg89sn251idqnzc05.pt&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;config.json&quot;</span><span class="p">:</span> <span class="s2">&quot;https://nyu.box.com/shared/static/qz1402ivuiv42wkct7qon43xhb9izvc1.json&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;label_encoder.json&quot;</span><span class="p">:</span> <span class="s2">&quot;https://nyu.box.com/shared/static/f9zjrl38k44qxbhuhgavb6j3d8k80g2b.json&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;tokenizer.json&quot;</span><span class="p">:</span> <span class="s2">&quot;https://nyu.box.com/shared/static/awyxvicqpnvt2cl329sugejhy1iu5532.json&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;tokenizer_config.json&quot;</span><span class="p">:</span> <span class="s2">&quot;https://nyu.box.com/shared/static/yj3ofletauzqirjy24826hcshzfl34pq.json&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">GEO_MODEL_REQUIRED_FILES</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">GEO_MODEL_FILES</span><span class="p">)</span>
+
+
+<span class="n">N_RANGES</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">MIN_RANGE_SIZE</span> <span class="o">=</span> <span class="mf">0.10</span>  <span class="c1"># 10%</span>
+
+<span class="n">SPATIAL_RANGE_DELTA_LONG</span> <span class="o">=</span> <span class="mf">0.0001</span>
+<span class="n">SPATIAL_RANGE_DELTA_LAT</span> <span class="o">=</span> <span class="mf">0.0001</span>
+
+<span class="n">MAX_ADDRESS_LENGTH</span> <span class="o">=</span> <span class="mi">90</span>  <span class="c1"># 90 characters</span>
+<span class="n">MAX_NOMINATIM_REQUESTS</span> <span class="o">=</span> <span class="mi">200</span>
+<span class="n">NOMINATIM_BATCH_SIZE</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="n">NOMINATIM_MIN_SPLIT_BATCH_SIZE</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># Batches &gt;=this are divided on failure</span>
+
+<span class="n">LATITUDE</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;latitude&quot;</span><span class="p">,</span> <span class="s2">&quot;lat&quot;</span><span class="p">,</span> <span class="s2">&quot;ycoord&quot;</span><span class="p">,</span> <span class="s2">&quot;y_coord&quot;</span><span class="p">)</span>
+<span class="n">LONGITUDE</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;longitude&quot;</span><span class="p">,</span> <span class="s2">&quot;long&quot;</span><span class="p">,</span> <span class="s2">&quot;lon&quot;</span><span class="p">,</span> <span class="s2">&quot;lng&quot;</span><span class="p">,</span> <span class="s2">&quot;xcoord&quot;</span><span class="p">,</span> <span class="s2">&quot;x_coord&quot;</span><span class="p">)</span>
+
+<span class="n">MAX_WRONG_LEVEL_ADMIN</span> <span class="o">=</span> <span class="mf">0.10</span>  <span class="c1"># 10%</span>
+
+
+<div class="viewcode-block" id="get_spatial_ranges">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.get_spatial_ranges">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_spatial_ranges</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a small number (3) of bounding boxes from lat/long points.</span>
+
+<span class="sd">    This performs K-Means clustering, returning a maximum of 3 clusters as</span>
+<span class="sd">    bounding boxes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">clustering</span> <span class="o">=</span> <span class="n">KMeans</span><span class="p">(</span><span class="n">n_clusters</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">N_RANGES</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)),</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">ignore_warnings</span><span class="p">(</span><span class="n">ConvergenceWarning</span><span class="p">):</span>
+        <span class="n">clustering</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;K-Means clusters: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">clustering</span><span class="o">.</span><span class="n">cluster_centers_</span><span class="p">))</span>
+
+    <span class="c1"># Compute confidence intervals for each range</span>
+    <span class="n">ranges</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">sizes</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">rg</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N_RANGES</span><span class="p">):</span>
+        <span class="n">cluster</span> <span class="o">=</span> <span class="p">[</span><span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">))</span> <span class="k">if</span> <span class="n">clustering</span><span class="o">.</span><span class="n">labels_</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="n">rg</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">cluster</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="c1"># Eliminate clusters of outliers</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cluster</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">MIN_RANGE_SIZE</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+            <span class="k">continue</span>
+
+        <span class="n">cluster</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">min_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="mf">0.05</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">cluster</span><span class="p">))</span>
+        <span class="n">max_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="mf">0.95</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">cluster</span><span class="p">))</span>
+        <span class="n">min_lat</span> <span class="o">=</span> <span class="n">cluster</span><span class="p">[</span><span class="n">min_idx</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">max_lat</span> <span class="o">=</span> <span class="n">cluster</span><span class="p">[</span><span class="n">max_idx</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">cluster</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">min_long</span> <span class="o">=</span> <span class="n">cluster</span><span class="p">[</span><span class="n">min_idx</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">max_long</span> <span class="o">=</span> <span class="n">cluster</span><span class="p">[</span><span class="n">max_idx</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">ranges</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="p">[</span><span class="n">min_long</span><span class="p">,</span> <span class="n">max_lat</span><span class="p">],</span>
+                <span class="p">[</span><span class="n">max_long</span><span class="p">,</span> <span class="n">min_lat</span><span class="p">],</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
+        <span class="n">sizes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">cluster</span><span class="p">))</span>
+    <span class="n">ranges</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Ranges: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ranges</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Sizes: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">sizes</span><span class="p">)</span>
+
+    <span class="c1"># Lucene needs shapes to have an area for tessellation (no point or line)</span>
+    <span class="k">for</span> <span class="n">rg</span> <span class="ow">in</span> <span class="n">ranges</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">rg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">rg</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">rg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">-=</span> <span class="n">SPATIAL_RANGE_DELTA_LONG</span>
+            <span class="n">rg</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">+=</span> <span class="n">SPATIAL_RANGE_DELTA_LONG</span>
+        <span class="k">if</span> <span class="n">rg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">rg</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="n">rg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="n">SPATIAL_RANGE_DELTA_LAT</span>
+            <span class="n">rg</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">-=</span> <span class="n">SPATIAL_RANGE_DELTA_LAT</span>
+
+    <span class="c1"># Convert to Elasticsearch syntax</span>
+    <span class="n">ranges</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">&quot;range&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;envelope&quot;</span><span class="p">,</span> <span class="s2">&quot;coordinates&quot;</span><span class="p">:</span> <span class="n">coords</span><span class="p">}}</span> <span class="k">for</span> <span class="n">coords</span> <span class="ow">in</span> <span class="n">ranges</span>
+    <span class="p">]</span>
+    <span class="k">return</span> <span class="n">ranges</span></div>
+
+
+
+<div class="viewcode-block" id="normalize_latlong_column_name">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.normalize_latlong_column_name">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">normalize_latlong_column_name</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">substrings</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Find the remainder of the column name after removing a substring.</span>
+
+<span class="sd">    This goes over the substrings in order and removes the first it finds from</span>
+<span class="sd">    the name. You should therefore put the more specific substrings first and</span>
+<span class="sd">    the shorter ones last. For example, this is used to turn both</span>
+<span class="sd">    ``&quot;cab_latitude_from&quot;`` and ``&quot;cab_longitude_from&quot;`` into ``&quot;cab__from&quot;``</span>
+<span class="sd">    which can then be matched.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">substr</span> <span class="ow">in</span> <span class="n">substrings</span><span class="p">:</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">substr</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">idx</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="p">[:</span><span class="n">idx</span><span class="p">]</span> <span class="o">+</span> <span class="n">name</span><span class="p">[</span><span class="n">idx</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">substr</span><span class="p">)</span> <span class="p">:]</span>
+            <span class="k">break</span>
+    <span class="k">return</span> <span class="n">name</span></div>
+
+
+
+<div class="viewcode-block" id="LatLongColumn">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.LatLongColumn">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">LatLongColumn</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="n">index</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">annot_pair</span><span class="p">:</span> <span class="n">typing</span><span class="o">.</span><span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="pair_latlong_columns">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.pair_latlong_columns">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pair_latlong_columns</span><span class="p">(</span><span class="n">columns_lat</span><span class="p">,</span> <span class="n">columns_long</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Go through likely latitude and longitude columns and finds pairs.</span>
+
+<span class="sd">    This tries to find columns that match apart from latitude and longitude</span>
+<span class="sd">    keywords (e.g. `longitude`, `long`, `lon`).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Normalize latitude column names</span>
+    <span class="n">normalized_lat</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">col</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">columns_lat</span><span class="p">):</span>
+        <span class="c1"># check if a pair was defined by the user (human-in-the-loop)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">col</span><span class="o">.</span><span class="n">annot_pair</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use normalized column name</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">normalize_latlong_column_name</span><span class="p">(</span><span class="n">col</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">LATITUDE</span><span class="p">)</span>
+        <span class="n">normalized_lat</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">i</span>
+
+    <span class="c1"># Go over normalized longitude column names and try to match</span>
+    <span class="n">pairs</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">missed_long</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">columns_long</span><span class="p">:</span>
+        <span class="c1"># check if a pair was defined by the user (human-in-the-loop)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">col</span><span class="o">.</span><span class="n">annot_pair</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use normalized column name</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">normalize_latlong_column_name</span><span class="p">(</span><span class="n">col</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">LONGITUDE</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">normalized_lat</span><span class="p">:</span>
+            <span class="n">pairs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="n">columns_lat</span><span class="p">[</span><span class="n">normalized_lat</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">name</span><span class="p">)],</span>
+                    <span class="n">col</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">missed_long</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">col</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+    <span class="c1"># Gather missed columns</span>
+    <span class="n">missed_lat</span> <span class="o">=</span> <span class="p">[</span><span class="n">columns_lat</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">normalized_lat</span><span class="o">.</span><span class="n">values</span><span class="p">())]</span>
+
+    <span class="k">return</span> <span class="n">pairs</span><span class="p">,</span> <span class="p">(</span><span class="n">missed_lat</span><span class="p">,</span> <span class="n">missed_long</span><span class="p">)</span></div>
+
+
+
+<span class="n">_re_loc</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
+    <span class="sa">r</span><span class="s2">&quot;\(&quot;</span>
+    <span class="sa">r</span><span class="s2">&quot;(-?[0-9]{1,3}\.[0-9]{1,15})&quot;</span>
+    <span class="sa">r</span><span class="s2">&quot;(?:,| |(?:, ))&quot;</span>
+    <span class="sa">r</span><span class="s2">&quot;(-?[0-9]{1,3}\.[0-9]{1,15})&quot;</span>
+    <span class="sa">r</span><span class="s2">&quot;\)$&quot;</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_parse_point</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">latlong</span><span class="p">):</span>
+    <span class="n">m</span> <span class="o">=</span> <span class="n">_re_loc</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">m</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+            <span class="n">y</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">latlong</span><span class="p">:</span>
+            <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">y</span><span class="p">,</span> <span class="n">x</span>
+        <span class="k">if</span> <span class="o">-</span><span class="mf">180.0</span> <span class="o">&lt;</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="mf">180.0</span> <span class="ow">and</span> <span class="o">-</span><span class="mf">90.0</span> <span class="o">&lt;</span> <span class="n">y</span> <span class="o">&lt;</span> <span class="mf">90.0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">y</span><span class="p">,</span> <span class="n">x</span>
+
+
+<div class="viewcode-block" id="parse_wkt_column">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.parse_wkt_column">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_wkt_column</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">latlong</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse a pandas.Series of points in WKT format or similar &quot;(long, lat)&quot;.</span>
+
+<span class="sd">    :param latlong: If False (the default), read ``(long, lat)`` format. If</span>
+<span class="sd">        True, read ``(lat, long)``.</span>
+<span class="sd">    :returns: A list of ``(lat, long)`` pairs</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Parse points</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_parse_point</span><span class="p">,</span> <span class="n">latlong</span><span class="o">=</span><span class="n">latlong</span><span class="p">)</span>
+    <span class="c1"># Drop NaN values</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">values</span><span class="p">)</span></div>
+
+
+
+<span class="n">_nominatim_session</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="nominatim_query">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.nominatim_query">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">nominatim_query</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">q</span><span class="p">):</span>
+    <span class="n">url</span> <span class="o">=</span> <span class="n">url</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Avoids warnings</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+            <span class="c1"># Batch query</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="n">_nominatim_session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">url</span>
+                <span class="o">+</span> <span class="s2">&quot;/search?&quot;</span>
+                <span class="o">+</span> <span class="n">urlencode</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;batch&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([{</span><span class="s2">&quot;q&quot;</span><span class="p">:</span> <span class="n">qe</span><span class="p">}</span> <span class="k">for</span> <span class="n">qe</span> <span class="ow">in</span> <span class="n">q</span><span class="p">]),</span>
+                        <span class="s2">&quot;format&quot;</span><span class="p">:</span> <span class="s2">&quot;jsonv2&quot;</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Normal query</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="n">_nominatim_session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">url</span> <span class="o">+</span> <span class="s2">&quot;/search?&quot;</span> <span class="o">+</span> <span class="n">urlencode</span><span class="p">({</span><span class="s2">&quot;q&quot;</span><span class="p">:</span> <span class="n">q</span><span class="p">,</span> <span class="s2">&quot;format&quot;</span><span class="p">:</span> <span class="s2">&quot;jsonv2&quot;</span><span class="p">}),</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">res</span><span class="o">.</span><span class="n">status_code</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">502</span><span class="p">,</span> <span class="mi">503</span><span class="p">,</span> <span class="mi">504</span><span class="p">):</span>
+            <span class="k">break</span>
+    <span class="n">res</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">res</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;application/json&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">requests</span><span class="o">.</span><span class="n">HTTPError</span><span class="p">(</span>
+            <span class="s2">&quot;Response is not JSON for URL: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">res</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
+            <span class="n">response</span><span class="o">=</span><span class="n">res</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="n">res</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;batch&quot;</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">res</span><span class="o">.</span><span class="n">json</span><span class="p">()</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_nominatim_batch</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">locations</span><span class="p">,</span> <span class="n">cache</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">locs</span> <span class="o">=</span> <span class="n">nominatim_query</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">q</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+    <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">500</span><span class="p">,</span> <span class="mi">414</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="nb">max</span><span class="p">(</span>
+            <span class="mi">2</span><span class="p">,</span> <span class="n">NOMINATIM_MIN_SPLIT_BATCH_SIZE</span>
+        <span class="p">):</span>
+            <span class="c1"># Try smaller batch size</span>
+            <span class="n">batch_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+            <span class="n">mid</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>
+            <span class="k">return</span> <span class="n">_nominatim_batch</span><span class="p">(</span>
+                <span class="n">url</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">batch_list</span><span class="p">[:</span><span class="n">mid</span><span class="p">]),</span> <span class="n">locations</span><span class="p">,</span> <span class="n">cache</span>
+            <span class="p">)</span> <span class="o">+</span> <span class="n">_nominatim_batch</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">batch_list</span><span class="p">[</span><span class="n">mid</span><span class="p">:]),</span> <span class="n">locations</span><span class="p">,</span> <span class="n">cache</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="n">e</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+
+    <span class="n">not_found</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">location</span><span class="p">,</span> <span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">locs</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+        <span class="k">if</span> <span class="n">location</span><span class="p">:</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">location</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;lat&quot;</span><span class="p">]),</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">location</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;lon&quot;</span><span class="p">]),</span>
+            <span class="p">)</span>
+            <span class="n">cache</span><span class="p">[</span><span class="n">value</span><span class="p">]</span> <span class="o">=</span> <span class="n">loc</span>
+            <span class="n">locations</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">loc</span><span class="p">]</span> <span class="o">*</span> <span class="n">count</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">cache</span><span class="p">[</span><span class="n">value</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">not_found</span> <span class="o">+=</span> <span class="n">count</span>
+    <span class="n">batch</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">not_found</span>
+
+
+<div class="viewcode-block" id="nominatim_resolve_all">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.nominatim_resolve_all">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">nominatim_resolve_all</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">array</span><span class="p">,</span> <span class="n">max_requests</span><span class="o">=</span><span class="n">MAX_NOMINATIM_REQUESTS</span><span class="p">):</span>
+    <span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">locations</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">not_found</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Unique locations not found</span>
+    <span class="n">non_empty</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">processed</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">processed</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">array</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">value</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">non_empty</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">MAX_ADDRESS_LENGTH</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">elif</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">cache</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">cache</span><span class="p">[</span><span class="n">value</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">locations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cache</span><span class="p">[</span><span class="n">value</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">:</span>
+            <span class="n">batch</span><span class="p">[</span><span class="n">value</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">batch</span><span class="p">[</span><span class="n">value</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span> <span class="o">==</span> <span class="n">NOMINATIM_BATCH_SIZE</span><span class="p">:</span>
+                <span class="n">not_found</span> <span class="o">+=</span> <span class="n">_nominatim_batch</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">locations</span><span class="p">,</span> <span class="n">cache</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">max_requests</span><span class="p">:</span>
+                    <span class="k">break</span>
+
+    <span class="k">if</span> <span class="n">batch</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">max_requests</span><span class="p">:</span>
+        <span class="n">not_found</span> <span class="o">+=</span> <span class="n">_nominatim_batch</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">locations</span><span class="p">,</span> <span class="n">cache</span><span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">&quot;Performed </span><span class="si">%d</span><span class="s2"> Nominatim queries (</span><span class="si">%d</span><span class="s2"> hits). Found </span><span class="si">%d</span><span class="s2">/</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="nb">len</span><span class="p">(</span><span class="n">cache</span><span class="p">),</span>
+        <span class="nb">len</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span> <span class="o">-</span> <span class="n">not_found</span><span class="p">,</span>
+        <span class="nb">len</span><span class="p">(</span><span class="n">locations</span><span class="p">),</span>
+        <span class="n">processed</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">locations</span><span class="p">,</span> <span class="n">non_empty</span></div>
+
+
+
+<div class="viewcode-block" id="disambiguate_admin_areas">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.disambiguate_admin_areas">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">disambiguate_admin_areas</span><span class="p">(</span><span class="n">admin_areas</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;This takes admin areas resolved from names and tries to disambiguate.</span>
+
+<span class="sd">    Each name in the input will have been resolved to multiple possible areas,</span>
+<span class="sd">    making the input a list of list. We want to build a simple list, where</span>
+<span class="sd">    each name has been resolved to the most likely area.</span>
+
+<span class="sd">    We choose so that all the areas are of the same level (e.g. all countries,</span>
+<span class="sd">    or all states, but not a mix of counties and states), and if possible all</span>
+<span class="sd">    in the same parent area (for example, states of the same country, or</span>
+<span class="sd">    counties in states of the same country).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Count possible options</span>
+    <span class="n">options</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">Counter</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">candidates</span> <span class="ow">in</span> <span class="n">admin_areas</span><span class="p">:</span>
+        <span class="c1"># Count options from the same list of candidates only once</span>
+        <span class="n">options_for_entry</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">area</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">:</span>
+            <span class="n">level</span> <span class="o">=</span> <span class="n">area</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">value</span>
+            <span class="n">area</span> <span class="o">=</span> <span class="n">area</span><span class="o">.</span><span class="n">get_parent_area</span><span class="p">()</span>
+            <span class="k">while</span> <span class="n">area</span><span class="p">:</span>
+                <span class="n">options_for_entry</span><span class="o">.</span><span class="n">add</span><span class="p">((</span><span class="n">level</span><span class="p">,</span> <span class="n">area</span><span class="p">))</span>
+                <span class="n">area</span> <span class="o">=</span> <span class="n">area</span><span class="o">.</span><span class="n">get_parent_area</span><span class="p">()</span>
+            <span class="n">options_for_entry</span><span class="o">.</span><span class="n">add</span><span class="p">((</span><span class="n">level</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+        <span class="n">options</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">options_for_entry</span><span class="p">)</span>
+
+    <span class="c1"># Throw out options with too few matches</span>
+    <span class="n">threshold</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">MAX_WRONG_LEVEL_ADMIN</span><span class="p">)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">admin_areas</span><span class="p">)</span>
+    <span class="n">threshold</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">threshold</span><span class="p">)</span>
+    <span class="n">options</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">option</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span> <span class="k">for</span> <span class="p">(</span><span class="n">option</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span> <span class="ow">in</span> <span class="n">options</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">count</span> <span class="o">&gt;=</span> <span class="n">threshold</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">options</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="c1"># Find best option</span>
+    <span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">common_parent</span><span class="p">),</span> <span class="n">_</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span>
+        <span class="n">options</span><span class="p">,</span>
+        <span class="c1"># Order:</span>
+        <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">entry</span><span class="p">:</span> <span class="p">(</span>  <span class="c1"># lambda ((level, parent_area), count):</span>
+            <span class="c1"># - by ascending level (prefer recognizing as a list of countries</span>
+            <span class="c1">#   over a list of states), then</span>
+            <span class="n">entry</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span>
+            <span class="c1"># - by descending level of the common parent (prefer a list of</span>
+            <span class="c1">#   counties in the same state over counties merely in the same</span>
+            <span class="c1">#   country over counties in different countries), then</span>
+            <span class="o">-</span><span class="p">(</span><span class="n">entry</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">value</span> <span class="k">if</span> <span class="n">entry</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="c1"># - by descending count</span>
+            <span class="o">-</span><span class="n">entry</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">common_parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">common_admin</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">common_admin</span> <span class="o">=</span> <span class="n">common_parent</span><span class="o">.</span><span class="n">levels</span><span class="p">[</span><span class="n">common_parent</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">value</span><span class="p">]</span>
+
+    <span class="c1"># Build the result</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">candidates</span> <span class="ow">in</span> <span class="n">admin_areas</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">area</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">area</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="n">level</span> <span class="ow">and</span> <span class="p">(</span>
+                <span class="n">common_parent</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">or</span> <span class="n">area</span><span class="o">.</span><span class="n">levels</span><span class="p">[</span><span class="n">common_parent</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">value</span><span class="p">]</span> <span class="o">==</span> <span class="n">common_admin</span>
+            <span class="p">):</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">area</span><span class="p">)</span>
+                <span class="k">break</span>
+
+    <span class="k">return</span> <span class="n">level</span><span class="p">,</span> <span class="n">result</span></div>
+
+
+
+<span class="n">GEOHASH_CHARS</span> <span class="o">=</span> <span class="s2">&quot;0123456789bcdefghjkmnpqrstuvwxyz&quot;</span>
+<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">GEOHASH_CHARS</span><span class="p">)</span> <span class="o">==</span> <span class="mi">32</span>
+<span class="n">GEOHASH_CHAR_VALUES</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">GEOHASH_CHARS</span><span class="p">)}</span>
+
+
+<div class="viewcode-block" id="bits_to_chars">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.bits_to_chars">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">bits_to_chars</span><span class="p">(</span><span class="n">bits</span><span class="p">,</span> <span class="n">base_bits</span><span class="p">):</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="n">i</span> <span class="o">+</span> <span class="n">base_bits</span> <span class="o">&lt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">bits</span><span class="p">):</span>
+        <span class="n">char</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">base_bits</span><span class="p">):</span>
+            <span class="n">char</span> <span class="o">=</span> <span class="p">(</span><span class="n">char</span> <span class="o">&lt;&lt;</span> <span class="mi">1</span><span class="p">)</span> <span class="o">|</span> <span class="n">bits</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="n">j</span><span class="p">]</span>
+        <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">GEOHASH_CHARS</span><span class="p">[</span><span class="n">char</span><span class="p">])</span>
+        <span class="n">i</span> <span class="o">+=</span> <span class="n">base_bits</span>
+
+    <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">result</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="chars_to_bits">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.chars_to_bits">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">chars_to_bits</span><span class="p">(</span><span class="n">chars</span><span class="p">,</span> <span class="n">base_bits</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">char</span> <span class="ow">in</span> <span class="n">chars</span><span class="p">:</span>
+        <span class="n">char</span> <span class="o">=</span> <span class="n">GEOHASH_CHAR_VALUES</span><span class="p">[</span><span class="n">char</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">base_bits</span><span class="p">)):</span>
+            <span class="k">yield</span> <span class="p">(</span><span class="n">char</span> <span class="o">&gt;&gt;</span> <span class="n">i</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">1</span></div>
+
+
+
+<div class="viewcode-block" id="location_to_bits">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.location_to_bits">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">location_to_bits</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">base</span><span class="p">,</span> <span class="n">precision</span><span class="p">):</span>
+    <span class="n">latitude</span><span class="p">,</span> <span class="n">longitude</span> <span class="o">=</span> <span class="n">point</span>
+
+    <span class="c1"># Compute the number of bits we need</span>
+    <span class="n">base_bits</span> <span class="o">=</span> <span class="n">base</span><span class="o">.</span><span class="n">bit_length</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="mi">2</span><span class="o">**</span><span class="n">base_bits</span> <span class="o">!=</span> <span class="n">base</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Base is not a power of 2&quot;</span><span class="p">)</span>
+    <span class="n">precision_bits</span> <span class="o">=</span> <span class="n">base_bits</span> <span class="o">*</span> <span class="n">precision</span>
+
+    <span class="n">lat_range</span> <span class="o">=</span> <span class="o">-</span><span class="mf">90.0</span><span class="p">,</span> <span class="mf">90.0</span>
+    <span class="n">long_range</span> <span class="o">=</span> <span class="o">-</span><span class="mf">180.0</span><span class="p">,</span> <span class="mf">180.0</span>
+    <span class="n">bits</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">bits</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">precision_bits</span><span class="p">:</span>
+        <span class="n">mid</span> <span class="o">=</span> <span class="p">(</span><span class="n">long_range</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">long_range</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">/</span> <span class="mf">2.0</span>
+        <span class="k">if</span> <span class="n">longitude</span> <span class="o">&gt;</span> <span class="n">mid</span><span class="p">:</span>
+            <span class="n">bits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">long_range</span> <span class="o">=</span> <span class="n">mid</span><span class="p">,</span> <span class="n">long_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">bits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">long_range</span> <span class="o">=</span> <span class="n">long_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">mid</span>
+
+        <span class="n">mid</span> <span class="o">=</span> <span class="p">(</span><span class="n">lat_range</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">lat_range</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">/</span> <span class="mf">2.0</span>
+        <span class="k">if</span> <span class="n">latitude</span> <span class="o">&gt;</span> <span class="n">mid</span><span class="p">:</span>
+            <span class="n">bits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">lat_range</span> <span class="o">=</span> <span class="n">mid</span><span class="p">,</span> <span class="n">lat_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">bits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">lat_range</span> <span class="o">=</span> <span class="n">lat_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">mid</span>
+    <span class="k">return</span> <span class="n">bits</span></div>
+
+
+
+<div class="viewcode-block" id="hash_location">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.hash_location">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">hash_location</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">base</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">precision</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hash coordinates into short strings usable for prefix search.</span>
+
+<span class="sd">    If base=32, this gives Geohash strings (each level splits cells into 32).</span>
+
+<span class="sd">    If base=4, this makes a quadtree (each level split cells into 4 quadrants).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">base_bits</span> <span class="o">=</span> <span class="n">base</span><span class="o">.</span><span class="n">bit_length</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span>
+
+    <span class="c1"># Build the bitstring</span>
+    <span class="n">bits</span> <span class="o">=</span> <span class="n">location_to_bits</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">base</span><span class="p">,</span> <span class="n">precision</span><span class="p">)</span>
+
+    <span class="c1"># Encode the bitstring</span>
+    <span class="k">return</span> <span class="n">bits_to_chars</span><span class="p">(</span><span class="n">bits</span><span class="p">,</span> <span class="n">base_bits</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="decode_hash">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.decode_hash">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">decode_hash</span><span class="p">(</span><span class="nb">hash</span><span class="p">,</span> <span class="n">base</span><span class="o">=</span><span class="mi">32</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Turn a hash back into a rectangle.</span>
+
+<span class="sd">    :returns: ``(min_lat, max_lat, min_long, max_long)``</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">base_bits</span> <span class="o">=</span> <span class="n">base</span><span class="o">.</span><span class="n">bit_length</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="mi">2</span><span class="o">**</span><span class="n">base_bits</span> <span class="o">!=</span> <span class="n">base</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Base is not a power of 2&quot;</span><span class="p">)</span>
+
+    <span class="n">lat_range</span> <span class="o">=</span> <span class="o">-</span><span class="mf">90.0</span><span class="p">,</span> <span class="mf">90.0</span>
+    <span class="n">long_range</span> <span class="o">=</span> <span class="o">-</span><span class="mf">180.0</span><span class="p">,</span> <span class="mf">180.0</span>
+    <span class="n">next_long</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">for</span> <span class="n">bit</span> <span class="ow">in</span> <span class="n">chars_to_bits</span><span class="p">(</span><span class="nb">hash</span><span class="p">,</span> <span class="n">base_bits</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">next_long</span><span class="p">:</span>
+            <span class="n">mid</span> <span class="o">=</span> <span class="p">(</span><span class="n">long_range</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">long_range</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">/</span> <span class="mf">2.0</span>
+            <span class="k">if</span> <span class="n">bit</span><span class="p">:</span>
+                <span class="n">long_range</span> <span class="o">=</span> <span class="n">mid</span><span class="p">,</span> <span class="n">long_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">long_range</span> <span class="o">=</span> <span class="n">long_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">mid</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">mid</span> <span class="o">=</span> <span class="p">(</span><span class="n">lat_range</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">lat_range</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">/</span> <span class="mf">2.0</span>
+            <span class="k">if</span> <span class="n">bit</span><span class="p">:</span>
+                <span class="n">lat_range</span> <span class="o">=</span> <span class="n">mid</span><span class="p">,</span> <span class="n">lat_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">lat_range</span> <span class="o">=</span> <span class="n">lat_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">mid</span>
+        <span class="n">next_long</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">next_long</span>
+
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">lat_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">lat_range</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+        <span class="n">long_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">long_range</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="bitrange">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.bitrange">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">bitrange</span><span class="p">(</span><span class="n">from_bits</span><span class="p">,</span> <span class="n">to_bits</span><span class="p">):</span>
+    <span class="n">bits</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">from_bits</span><span class="p">)</span>
+    <span class="k">while</span> <span class="n">bits</span> <span class="o">!=</span> <span class="n">to_bits</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">bits</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">bits</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">bits</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">bits</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+                <span class="k">break</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">bits</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">yield</span> <span class="n">bits</span></div>
+
+
+
+<div class="viewcode-block" id="Geohasher">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.Geohasher">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Geohasher</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">number</span><span class="p">,</span> <span class="n">base</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">precision</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">number</span> <span class="o">=</span> <span class="n">number</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base</span> <span class="o">=</span> <span class="n">base</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">precision</span> <span class="o">=</span> <span class="n">precision</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">tree_root</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">{}]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">number_at_level</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">precision</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Geohasher.add_points">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.Geohasher.add_points">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_points</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">points</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">point</span> <span class="ow">in</span> <span class="n">points</span><span class="p">:</span>
+            <span class="n">geohash</span> <span class="o">=</span> <span class="n">hash_location</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">base</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">)</span>
+            <span class="c1"># Add this hash to the tree</span>
+            <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tree_root</span>
+            <span class="k">for</span> <span class="n">level</span><span class="p">,</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">geohash</span><span class="p">):</span>
+                <span class="n">node</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">node</span> <span class="o">=</span> <span class="n">node</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">key</span><span class="p">]</span>
+                <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                    <span class="n">new_node</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">{}]</span>
+                    <span class="n">node</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_node</span>
+                    <span class="n">node</span> <span class="o">=</span> <span class="n">new_node</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">number_at_level</span><span class="p">[</span><span class="n">level</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                    <span class="c1"># If this level has too many nodes, stop building it</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">number_at_level</span><span class="p">[</span><span class="n">level</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">number</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">precision</span> <span class="o">=</span> <span class="n">level</span>
+                        <span class="k">break</span>
+            <span class="n">node</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span></div>
+
+
+<div class="viewcode-block" id="Geohasher.add_aab">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.Geohasher.add_aab">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_aab</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">box</span><span class="p">):</span>
+        <span class="n">base_bits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">bit_length</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span>
+
+        <span class="n">min_long</span><span class="p">,</span> <span class="n">max_long</span><span class="p">,</span> <span class="n">min_lat</span><span class="p">,</span> <span class="n">max_lat</span> <span class="o">=</span> <span class="n">box</span>
+        <span class="n">min_bits</span> <span class="o">=</span> <span class="n">location_to_bits</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">min_lat</span><span class="p">,</span> <span class="n">min_long</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">base</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">min_long_bits</span> <span class="o">=</span> <span class="n">min_bits</span><span class="p">[</span><span class="mi">0</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">min_lat_bits</span> <span class="o">=</span> <span class="n">min_bits</span><span class="p">[</span><span class="mi">1</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">max_bits</span> <span class="o">=</span> <span class="n">location_to_bits</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">max_lat</span><span class="p">,</span> <span class="n">max_long</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">base</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">max_long_bits</span> <span class="o">=</span> <span class="n">max_bits</span><span class="p">[</span><span class="mi">0</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">max_lat_bits</span> <span class="o">=</span> <span class="n">max_bits</span><span class="p">[</span><span class="mi">1</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">tree_root</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">level</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">while</span> <span class="n">level</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">:</span>
+            <span class="n">n_long_bits</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">level</span> <span class="o">*</span> <span class="n">base_bits</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="n">n_lat_bits</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">level</span> <span class="o">*</span> <span class="n">base_bits</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">long_bits</span> <span class="ow">in</span> <span class="n">bitrange</span><span class="p">(</span>
+                <span class="n">min_long_bits</span><span class="p">[:</span><span class="n">n_long_bits</span><span class="p">],</span>
+                <span class="n">max_long_bits</span><span class="p">[:</span><span class="n">n_long_bits</span><span class="p">],</span>
+            <span class="p">):</span>
+                <span class="k">for</span> <span class="n">lat_bits</span> <span class="ow">in</span> <span class="n">bitrange</span><span class="p">(</span>
+                    <span class="n">min_lat_bits</span><span class="p">[:</span><span class="n">n_lat_bits</span><span class="p">],</span>
+                    <span class="n">max_lat_bits</span><span class="p">[:</span><span class="n">n_lat_bits</span><span class="p">],</span>
+                <span class="p">):</span>
+                    <span class="n">bits</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">n_long_bits</span> <span class="o">+</span> <span class="n">n_lat_bits</span><span class="p">)</span>
+                    <span class="n">bits</span><span class="p">[</span><span class="mi">0</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">long_bits</span>
+                    <span class="n">bits</span><span class="p">[</span><span class="mi">1</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">lat_bits</span>
+                    <span class="n">geohash</span> <span class="o">=</span> <span class="n">bits_to_chars</span><span class="p">(</span><span class="n">bits</span><span class="p">,</span> <span class="n">base_bits</span><span class="p">)</span>
+
+                    <span class="c1"># Add this hash to the tree</span>
+                    <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tree_root</span>
+                    <span class="k">for</span> <span class="n">lvl</span><span class="p">,</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">geohash</span><span class="p">):</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="n">node</span> <span class="o">=</span> <span class="n">node</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">key</span><span class="p">]</span>
+                        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                            <span class="n">new_node</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">{}]</span>
+                            <span class="n">node</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_node</span>
+                            <span class="n">node</span> <span class="o">=</span> <span class="n">new_node</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">number_at_level</span><span class="p">[</span><span class="n">lvl</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="n">node</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">number_at_level</span><span class="p">[</span><span class="n">level</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">number</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">precision</span> <span class="o">=</span> <span class="n">level</span> <span class="o">-</span> <span class="mi">1</span>
+                        <span class="k">break</span>
+
+            <span class="n">level</span> <span class="o">+=</span> <span class="mi">1</span></div>
+
+
+<div class="viewcode-block" id="Geohasher.get_hashes">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.Geohasher.get_hashes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_hashes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Reconstruct the hashes at this level</span>
+        <span class="n">hashes</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">add_node</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">level</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">:</span>
+                <span class="n">hashes</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">prefix</span><span class="p">,</span> <span class="n">node</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+                <span class="k">return</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">node</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">add_node</span><span class="p">(</span><span class="n">prefix</span> <span class="o">+</span> <span class="n">k</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">level</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">add_node</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tree_root</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">hashes</span></div>
+
+
+<div class="viewcode-block" id="Geohasher.get_hashes_json">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.Geohasher.get_hashes_json">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_hashes_json</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">hashes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_hashes</span><span class="p">()</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;hash&quot;</span><span class="p">:</span> <span class="n">h</span><span class="p">,</span>
+                <span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="n">n</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="k">for</span> <span class="n">h</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">hashes</span>
+        <span class="p">]</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">total</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">tree_root</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="median_smallest_distance">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.median_smallest_distance">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">median_smallest_distance</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">tree</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Median over all points of the distance to their closest neighbor.</span>
+
+<span class="sd">    This gives an idea of the &quot;grid size&quot; of a point dataset.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">points</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">points</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">tree</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># points = numpy.unique(points, axis=0)  # Too slow</span>
+        <span class="n">points</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">points</span><span class="p">)))</span>
+        <span class="n">tree</span> <span class="o">=</span> <span class="n">KDTree</span><span class="p">(</span><span class="n">points</span><span class="p">)</span>
+
+    <span class="c1"># Get the minimum distances to neighbors for a sample of points</span>
+    <span class="n">rnd</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="mi">89</span><span class="p">)</span>
+    <span class="n">sample_size</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="mi">100</span><span class="p">)</span>
+    <span class="n">sample_idx</span> <span class="o">=</span> <span class="n">rnd</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="n">sample_size</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">sample</span> <span class="o">=</span> <span class="n">points</span><span class="p">[</span><span class="n">sample_idx</span><span class="p">]</span>
+    <span class="n">distances</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">sample</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">return_distance</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Return the median of that</span>
+    <span class="k">return</span> <span class="n">numpy</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">distances</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span></div>
+
+
+
+<span class="c1"># ============================================================================</span>
+<span class="c1"># Geo Classifier</span>
+<span class="c1"># author: Eden Wu</span>
+<span class="c1"># ============================================================================</span>
+
+
+<div class="viewcode-block" id="mean_pool">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.mean_pool">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">mean_pool</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Mean pooling over sequence length (matches train_cta_classifier.py).&quot;&quot;&quot;</span>
+    <span class="n">token_embeddings</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">last_hidden_state</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">attention_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">token_embeddings</span><span class="o">.</span><span class="n">size</span><span class="p">())</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">token_embeddings</span> <span class="o">*</span> <span class="n">mask</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="mf">1e-9</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="CTAClassificationModel">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.CTAClassificationModel">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CTAClassificationModel</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Classification model with mean pooling (matches train_cta_classifier.py).&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_labels</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_spatial_head</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">AutoModel</span><span class="o">.</span><span class="n">from_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+        <span class="n">hidden_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">hidden_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden_size</span><span class="p">,</span> <span class="n">num_labels</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_spatial_head</span> <span class="o">=</span> <span class="n">use_spatial_head</span>
+        <span class="k">if</span> <span class="n">use_spatial_head</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">spatial_head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+
+<div class="viewcode-block" id="CTAClassificationModel.forward">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.CTAClassificationModel.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">spatial_labels</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">input_ids</span><span class="o">=</span><span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="o">=</span><span class="n">attention_mask</span><span class="p">)</span>
+        <span class="n">pooled</span> <span class="o">=</span> <span class="n">mean_pool</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">)</span>
+        <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="p">(</span><span class="n">pooled</span><span class="p">)</span>
+
+        <span class="k">class</span><span class="w"> </span><span class="nc">Output</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="n">out</span> <span class="o">=</span> <span class="n">Output</span><span class="p">()</span>
+        <span class="n">out</span><span class="o">.</span><span class="n">logits</span> <span class="o">=</span> <span class="n">logits</span>
+        <span class="n">out</span><span class="o">.</span><span class="n">pooled</span> <span class="o">=</span> <span class="n">pooled</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_spatial_head</span> <span class="ow">and</span> <span class="n">spatial_labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">spatial_logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spatial_head</span><span class="p">(</span><span class="n">pooled</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="CTAContrastiveModel">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.CTAContrastiveModel">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CTAContrastiveModel</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Encoder with projection head for contrastive learning (matches train_cta_classifier.py).&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">embed_dim</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span> <span class="n">num_labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">AutoModel</span><span class="o">.</span><span class="n">from_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+        <span class="n">hidden_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">hidden_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">projection</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden_size</span><span class="p">,</span> <span class="n">hidden_size</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden_size</span><span class="p">,</span> <span class="n">embed_dim</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden_size</span><span class="p">,</span> <span class="n">num_labels</span><span class="p">)</span> <span class="k">if</span> <span class="n">num_labels</span> <span class="k">else</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="CTAContrastiveModel.forward">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.CTAContrastiveModel.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">,</span> <span class="n">return_embeddings</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">input_ids</span><span class="o">=</span><span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="o">=</span><span class="n">attention_mask</span><span class="p">)</span>
+        <span class="n">pooled</span> <span class="o">=</span> <span class="n">mean_pool</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">return_embeddings</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">projection</span><span class="p">(</span><span class="n">pooled</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="p">(</span><span class="n">pooled</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span> <span class="k">else</span> <span class="n">pooled</span></div>
+
+
+<div class="viewcode-block" id="CTAContrastiveModel.get_embeddings">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.CTAContrastiveModel.get_embeddings">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_embeddings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">,</span> <span class="n">return_embeddings</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="download_geo_model">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.download_geo_model">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">download_geo_model</span><span class="p">(</span><span class="n">model_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">files</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Download GeoClassifier model files from NYU Box.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model_dir: Directory to save the model files</span>
+<span class="sd">        files: Dict mapping filename to URL (default: GEO_MODEL_FILES)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">files</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">files</span> <span class="o">=</span> <span class="n">GEO_MODEL_FILES</span>
+
+    <span class="n">model_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">model_dir</span><span class="p">)</span>
+    <span class="n">model_path</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Downloading GeoClassifier model to </span><span class="si">{</span><span class="n">model_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">filename</span><span class="p">,</span> <span class="n">url</span> <span class="ow">in</span> <span class="n">files</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">file_path</span> <span class="o">=</span> <span class="n">model_path</span> <span class="o">/</span> <span class="n">filename</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Downloading </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+
+            <span class="n">downloaded</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">iter_content</span><span class="p">(</span><span class="n">chunk_size</span><span class="o">=</span><span class="mi">8192</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">chunk</span><span class="p">:</span>
+                        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+                        <span class="n">downloaded</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">downloaded</span> <span class="o">&gt;</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">:</span>
+                <span class="n">size_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">downloaded</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">1024</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">1024</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">MB&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">size_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">downloaded</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">1024</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">KB&quot;</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2">: downloaded (</span><span class="si">{</span><span class="n">size_str</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Failed to download </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">raise</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Model download complete&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="GeoClassifier">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.GeoClassifier">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GeoClassifier</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Unified interface for CTA classification with automatic model download.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">auto_download</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the GeoClassifier.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_dir: Path to the model directory (default: bundled model if present,</span>
+<span class="sd">                otherwise a user cache directory)</span>
+<span class="sd">            auto_download: If True, automatically download model if not found</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">required_files</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">GEO_MODEL_REQUIRED_FILES</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">model_dir</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Default to profiler/model relative to this module&#39;s location</span>
+            <span class="n">profiler_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span>
+            <span class="n">package_model_dir</span> <span class="o">=</span> <span class="n">profiler_dir</span> <span class="o">/</span> <span class="s2">&quot;model&quot;</span>
+            <span class="k">if</span> <span class="nb">all</span><span class="p">((</span><span class="n">package_model_dir</span> <span class="o">/</span> <span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">required_files</span><span class="p">):</span>
+                <span class="n">model_dir</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">package_model_dir</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">cache_root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;XDG_CACHE_HOME&quot;</span><span class="p">,</span> <span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="s2">&quot;.cache&quot;</span><span class="p">))</span>
+                <span class="n">model_dir</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">cache_root</span> <span class="o">/</span> <span class="s2">&quot;atlas_profiler&quot;</span> <span class="o">/</span> <span class="s2">&quot;model&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">model_dir</span><span class="p">)</span>
+
+        <span class="n">missing_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">required_files</span> <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_dir</span> <span class="o">/</span> <span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">()]</span>
+        <span class="k">if</span> <span class="n">missing_files</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">auto_download</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="s2">&quot;Model artifact incomplete (</span><span class="si">%s</span><span class="s2"> missing). Downloading complete artifact...&quot;</span><span class="p">,</span>
+                    <span class="n">missing_files</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">download_geo_model</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_dir</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Model files not found in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model_dir</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">missing_files</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="s2">&quot;Set auto_download=True or download from NYU Box.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="n">missing_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">required_files</span> <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_dir</span> <span class="o">/</span> <span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">()]</span>
+        <span class="k">if</span> <span class="n">missing_files</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Model artifact in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model_dir</span><span class="si">}</span><span class="s2"> is incomplete: </span><span class="si">{</span><span class="n">missing_files</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Load label encoder config</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_dir</span> <span class="o">/</span> <span class="s2">&quot;label_encoder.json&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">classes</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;classes&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mode&quot;</span><span class="p">,</span> <span class="s2">&quot;classification&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_name</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;model_name&quot;</span><span class="p">,</span> <span class="s2">&quot;BAAI/bge-small-en-v1.5&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">embed_dim</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;embed_dim&quot;</span><span class="p">,</span> <span class="mi">128</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name_repeat</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name_repeat&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># Name emphasis</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">special_tokens</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;special_tokens&quot;</span><span class="p">,</span> <span class="p">{})</span>  <span class="c1"># [COL], [VAL] tokens</span>
+
+        <span class="c1"># Device</span>
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">torch</span><span class="o">.</span><span class="n">backends</span><span class="o">.</span><span class="n">mps</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;mps&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_dir</span><span class="p">))</span>
+
+        <span class="c1"># Load encoder config from saved directory</span>
+        <span class="n">encoder_config</span> <span class="o">=</span> <span class="n">AutoConfig</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_dir</span><span class="p">))</span>
+
+        <span class="c1"># Load checkpoint to inspect keys and determine model architecture</span>
+        <span class="n">checkpoint_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_dir</span> <span class="o">/</span> <span class="s2">&quot;model.pt&quot;</span>
+        <span class="n">checkpoint</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">checkpoint_path</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+        <span class="n">checkpoint_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">checkpoint</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+        <span class="c1"># Detect model type from checkpoint keys (prioritize checkpoint structure over mode)</span>
+        <span class="n">has_projection</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;projection.&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">checkpoint_keys</span><span class="p">)</span>
+        <span class="n">has_spatial_head</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="s2">&quot;spatial_head&quot;</span> <span class="ow">in</span> <span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">checkpoint_keys</span><span class="p">)</span>
+
+        <span class="c1"># Determine which model to use based on checkpoint structure</span>
+        <span class="c1"># If checkpoint has projection head, use contrastive model</span>
+        <span class="c1"># Otherwise, use classification model (works for classification, fine_tune, combined modes)</span>
+        <span class="k">if</span> <span class="n">has_projection</span><span class="p">:</span>
+            <span class="c1"># Contrastive model (has projection head)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">CTAContrastiveModel</span><span class="p">(</span>
+                <span class="n">embed_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">embed_dim</span><span class="p">,</span>
+                <span class="n">num_labels</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">),</span>
+                <span class="n">config</span><span class="o">=</span><span class="n">encoder_config</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">&quot;Using CTAContrastiveModel (detected projection head in checkpoint, mode=</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Classification model (no projection head)</span>
+            <span class="c1"># This works for classification, fine_tune, and combined modes</span>
+            <span class="c1"># since combined/fine_tune models are saved as classification models</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">CTAClassificationModel</span><span class="p">(</span>
+                <span class="n">num_labels</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">),</span>
+                <span class="n">config</span><span class="o">=</span><span class="n">encoder_config</span><span class="p">,</span>
+                <span class="n">use_spatial_head</span><span class="o">=</span><span class="n">has_spatial_head</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">&quot;Using CTAClassificationModel (no projection head, mode=</span><span class="si">%s</span><span class="s2">, has_spatial_head=</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">,</span>
+                <span class="n">has_spatial_head</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Load saved weights (use strict=False to handle missing/extra keys gracefully)</span>
+        <span class="n">checkpoint</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">checkpoint</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;metric_projection.&quot;</span><span class="p">)</span>
+        <span class="p">}</span>
+        <span class="n">missing_keys</span><span class="p">,</span> <span class="n">unexpected_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span>
+            <span class="n">checkpoint</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">missing_keys</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing keys when loading model: </span><span class="si">{</span><span class="n">missing_keys</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">unexpected_keys</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected keys when loading model: </span><span class="si">{</span><span class="n">unexpected_keys</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_format_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Format input with special tokens: [COL] name [VAL] val1 [VAL] val2...&quot;&quot;&quot;</span>
+        <span class="c1"># Parse &quot;name: val1, val2, val3&quot; format</span>
+        <span class="k">if</span> <span class="s2">&quot;: &quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">text</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">text</span>
+
+        <span class="n">name</span><span class="p">,</span> <span class="n">values</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;: &quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">col_tok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">special_tokens</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;col_token&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">val_tok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">special_tokens</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;val_token&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Format column name with repetition</span>
+        <span class="k">if</span> <span class="n">col_tok</span> <span class="ow">and</span> <span class="n">name</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">name_repeat</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">col_parts</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">col_tok</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">name_repeat</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">col_parts</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">col_tok</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">col_parts</span> <span class="o">=</span> <span class="n">name</span>
+
+        <span class="c1"># Format values with [VAL] token</span>
+        <span class="k">if</span> <span class="n">val_tok</span><span class="p">:</span>
+            <span class="n">val_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">v</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)]</span>
+            <span class="n">val_parts</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">val_tok</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">val_list</span><span class="p">[:</span><span class="mi">10</span><span class="p">]])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">val_parts</span> <span class="o">=</span> <span class="n">values</span>
+
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">col_parts</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">val_parts</span><span class="si">}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+<div class="viewcode-block" id="GeoClassifier.predict_batch">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.GeoClassifier.predict_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">predict_batch</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">texts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Batch prediction for multiple columns in ONE forward pass.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            texts: List of texts in format &quot;column_name: val1, val2, val3&quot;</span>
+<span class="sd">            threshold: Confidence threshold below which to return non_spatial</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of dicts with &#39;label&#39; and &#39;confidence&#39; for each input</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">texts</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+
+        <span class="c1"># Format all inputs</span>
+        <span class="n">formatted_texts</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_format_input</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">texts</span><span class="p">]</span>
+
+        <span class="c1"># Batch tokenize (much faster than tokenizing one by one)</span>
+        <span class="n">encodings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">(</span>
+            <span class="n">formatted_texts</span><span class="p">,</span>
+            <span class="n">truncation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">padding</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Pad to longest in batch (more efficient)</span>
+            <span class="n">max_length</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
+            <span class="n">return_tensors</span><span class="o">=</span><span class="s2">&quot;pt&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">input_ids</span> <span class="o">=</span> <span class="n">encodings</span><span class="p">[</span><span class="s2">&quot;input_ids&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">encodings</span><span class="p">[</span><span class="s2">&quot;attention_mask&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+            <span class="c1"># SINGLE forward pass for ALL columns!</span>
+            <span class="c1"># Handle both model types</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">CTAClassificationModel</span><span class="p">):</span>
+                <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">input_ids</span><span class="o">=</span><span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="o">=</span><span class="n">attention_mask</span><span class="p">)</span>
+                <span class="n">logits</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">logits</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># CTAContrastiveModel</span>
+                <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">)</span>
+                <span class="c1"># If contrastive model doesn&#39;t have classifier, this won&#39;t work</span>
+                <span class="c1"># But based on training code, it should have classifier for inference</span>
+
+            <span class="n">probs</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [batch_size, num_classes]</span>
+
+        <span class="c1"># Process results for each column</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">texts</span><span class="p">)):</span>
+            <span class="n">top_prob</span><span class="p">,</span> <span class="n">top_idx</span> <span class="o">=</span> <span class="n">probs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">[</span><span class="n">top_idx</span><span class="o">.</span><span class="n">item</span><span class="p">()]</span>
+            <span class="n">confidence</span> <span class="o">=</span> <span class="n">top_prob</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="n">threshold</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">confidence</span> <span class="o">&lt;</span> <span class="n">threshold</span><span class="p">:</span>
+                <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;non_spatial&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">confidence</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">label</span><span class="p">,</span>
+                        <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="n">confidence</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">results</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="HybridGeoClassifier">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.HybridGeoClassifier">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">HybridGeoClassifier</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Hybrid classifier: ML prediction first, then rule-based validation.</span>
+
+<span class="sd">    For sensitive spatial types (BBL, BIN, lat/lon, zip, geometry), validates</span>
+<span class="sd">    the ML prediction with pattern/range checks. If validation fails, returns</span>
+<span class="sd">    non_spatial to avoid false positives.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># Types requiring rule-based validation after ML prediction</span>
+    <span class="n">VALIDATE_TYPES</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;bbl&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;bin&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;latitude&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;longitude&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;x_coord&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;y_coord&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;zip5&quot;</span><span class="p">,</span>  <span class="c1"># 5-digit ZIP code</span>
+        <span class="s2">&quot;zip9&quot;</span><span class="p">,</span>  <span class="c1"># 9-digit ZIP+4 code</span>
+        <span class="s2">&quot;state_code&quot;</span><span class="p">,</span>  <span class="c1"># State codes (e.g., &quot;NY&quot;, &quot;CA&quot;)</span>
+        <span class="s2">&quot;borough&quot;</span><span class="p">,</span>  <span class="c1"># Named boroughs (e.g., &quot;Brooklyn&quot;, &quot;Queens&quot;)</span>
+        <span class="s2">&quot;borough_code&quot;</span><span class="p">,</span>  <span class="c1"># Borough codes (numeric/alphanumeric)</span>
+        <span class="s2">&quot;point&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;polygon&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;multi-polygon&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;line&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;multi-line&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="c1"># Pre-compiled regex patterns for zip codes (speedup)</span>
+    <span class="n">_ZIP_PATTERNS</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^\d</span><span class="si">{5}</span><span class="s2">$&quot;</span><span class="p">),</span>  <span class="c1"># US ZIP</span>
+        <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^\d</span><span class="si">{5}</span><span class="s2">-\d</span><span class="si">{4}</span><span class="s2">$&quot;</span><span class="p">),</span>  <span class="c1"># US ZIP+4</span>
+        <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^[A-Z]\d[A-Z]\s?\d[A-Z]\d$&quot;</span><span class="p">),</span>  <span class="c1"># Canadian</span>
+        <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^[A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]</span><span class="si">{2}</span><span class="s2">$&quot;</span><span class="p">),</span>  <span class="c1"># UK</span>
+        <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^\d</span><span class="si">{3}</span><span class="s2">-\d</span><span class="si">{4}</span><span class="s2">$&quot;</span><span class="p">),</span>  <span class="c1"># Japan</span>
+    <span class="p">]</span>
+
+    <span class="c1"># WKT geometry prefixes (tuple for faster startswith)</span>
+    <span class="n">_WKT_PREFIXES</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;POINT&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;MULTIPOINT&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;LINESTRING&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;MULTILINESTRING&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;POLYGON&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;MULTIPOLYGON&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ml_classifier</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize hybrid classifier.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ml_classifier: GeoClassifier instance for ML predictions</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ml</span> <span class="o">=</span> <span class="n">ml_classifier</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_bbl_pattern</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if values match NYC BBL pattern (10 digits, starts with 1-5).&quot;&quot;&quot;</span>
+        <span class="n">valid_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">s</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)))</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">10</span> <span class="ow">or</span> <span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="s2">&quot;12345&quot;</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="kc">False</span>  <span class="c1"># Early fail</span>
+                <span class="n">valid_count</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="n">valid_count</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_bin_pattern</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if values match NYC BIN pattern (7 digits, starts with 1-5).&quot;&quot;&quot;</span>
+        <span class="n">valid_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">s</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)))</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">7</span> <span class="ow">or</span> <span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="s2">&quot;12345&quot;</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="kc">False</span>  <span class="c1"># Early fail</span>
+                <span class="n">valid_count</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="n">valid_count</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_latitude_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if numeric values are in valid US latitude range (18.0-71.5, positive).&quot;&quot;&quot;</span>
+        <span class="n">valid_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+                <span class="c1"># US latitudes: contiguous US (24.5-49.5) or extended for AK/HI (18.0-71.5)</span>
+                <span class="c1"># Should be POSITIVE (no negative values)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="mf">18.0</span> <span class="o">&lt;=</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="mf">71.5</span><span class="p">)</span> <span class="ow">and</span> <span class="n">n</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="kc">False</span>  <span class="c1"># Early fail</span>
+                <span class="n">valid_count</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                <span class="k">continue</span>
+        <span class="k">return</span> <span class="n">valid_count</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_longitude_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if numeric values are in valid US longitude range (-125.0 to -66.0, negative).&quot;&quot;&quot;</span>
+        <span class="n">valid_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+                <span class="c1"># US longitudes: always NEGATIVE, range -125.0 to -66.0</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="o">-</span><span class="mf">125.0</span> <span class="o">&lt;=</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="o">-</span><span class="mf">66.0</span> <span class="ow">and</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="kc">False</span>  <span class="c1"># Early fail</span>
+                <span class="n">valid_count</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                <span class="k">continue</span>
+        <span class="k">return</span> <span class="n">valid_count</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_projected_coord</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if values look like projected coordinates (specific magnitude ranges).&quot;&quot;&quot;</span>
+        <span class="n">valid_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+                <span class="c1"># X_coord: magnitude ~1,000,000-15,000,000</span>
+                <span class="c1"># Y_coord: magnitude ~2,000,000-7,000,000</span>
+                <span class="c1"># Accept either range (X or Y)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span>
+                    <span class="p">(</span><span class="mi">1_000_000</span> <span class="o">&lt;=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">15_000_000</span><span class="p">)</span>
+                    <span class="ow">or</span> <span class="p">(</span><span class="mi">2_000_000</span> <span class="o">&lt;=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">7_000_000</span><span class="p">)</span>
+                <span class="p">):</span>
+                    <span class="k">return</span> <span class="kc">False</span>  <span class="c1"># Early fail - not in expected projected coord range</span>
+                <span class="n">valid_count</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                <span class="k">continue</span>
+        <span class="k">return</span> <span class="n">valid_count</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_zip_pattern</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if values match common postal code patterns (uses pre-compiled regex).&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ZIP_PATTERNS</span><span class="p">):</span>
+                <span class="k">return</span> <span class="kc">True</span>  <span class="c1"># Early return on first match</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_state_code_pattern</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if values match US state code pattern (2 uppercase letters).&quot;&quot;&quot;</span>
+        <span class="n">us_states</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;AL&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;AK&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;AZ&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;AR&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;CA&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;CO&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;CT&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;DE&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;FL&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;GA&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;HI&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;ID&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;IL&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;IN&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;IA&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;KS&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;KY&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;LA&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;ME&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;MD&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;MA&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;MI&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;MN&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;MS&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;MO&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;MT&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;NE&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;NV&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;NH&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;NJ&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;NM&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;NY&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;NC&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;ND&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;OH&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;OK&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;OR&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;PA&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;RI&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;SC&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;SD&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;TN&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;TX&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;UT&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;VT&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;VA&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;WA&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;WV&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;WI&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;WY&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;DC&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;AS&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;GU&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;MP&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;PR&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;VI&quot;</span><span class="p">,</span>  <span class="c1"># Territories</span>
+        <span class="p">}</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">us_states</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_wkt_geometry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if values are WKT geometry strings.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">v_upper</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">v_upper</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_WKT_PREFIXES</span><span class="p">):</span>  <span class="c1"># Tuple for faster check</span>
+                <span class="k">return</span> <span class="kc">True</span>  <span class="c1"># Early return on first match</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_prediction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate ML prediction using rule-based checks.&quot;&quot;&quot;</span>
+        <span class="n">name_lower</span> <span class="o">=</span> <span class="n">column_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;bbl&quot;</span><span class="p">:</span>
+            <span class="n">name_ok</span> <span class="o">=</span> <span class="s2">&quot;bbl&quot;</span> <span class="ow">in</span> <span class="n">name_lower</span>
+            <span class="n">pattern_ok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_bbl_pattern</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">name_ok</span> <span class="ow">or</span> <span class="n">pattern_ok</span>
+
+        <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;bin&quot;</span><span class="p">:</span>
+            <span class="n">name_ok</span> <span class="o">=</span> <span class="s2">&quot;bin&quot;</span> <span class="ow">in</span> <span class="n">name_lower</span> <span class="ow">and</span> <span class="s2">&quot;binary&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">name_lower</span>
+            <span class="n">pattern_ok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_bin_pattern</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">name_ok</span> <span class="ow">or</span> <span class="n">pattern_ok</span>
+
+        <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;latitude&quot;</span><span class="p">:</span>
+            <span class="n">name_ok</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">k</span> <span class="ow">in</span> <span class="n">name_lower</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;lat&quot;</span><span class="p">,</span> <span class="s2">&quot;latitude&quot;</span><span class="p">))</span>
+            <span class="n">range_ok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_latitude_range</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">name_ok</span> <span class="ow">or</span> <span class="n">range_ok</span>
+
+        <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;longitude&quot;</span><span class="p">:</span>
+            <span class="n">name_ok</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">k</span> <span class="ow">in</span> <span class="n">name_lower</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;lon&quot;</span><span class="p">,</span> <span class="s2">&quot;lng&quot;</span><span class="p">,</span> <span class="s2">&quot;longitude&quot;</span><span class="p">))</span>
+            <span class="n">range_ok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_longitude_range</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">name_ok</span> <span class="ow">or</span> <span class="n">range_ok</span>
+
+        <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;x_coord&quot;</span><span class="p">:</span>
+            <span class="n">name_ok</span> <span class="o">=</span> <span class="s2">&quot;x_coord&quot;</span> <span class="ow">in</span> <span class="n">name_lower</span> <span class="ow">or</span> <span class="s2">&quot;xcoord&quot;</span> <span class="ow">in</span> <span class="n">name_lower</span>
+            <span class="n">range_ok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_projected_coord</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">name_ok</span> <span class="ow">or</span> <span class="n">range_ok</span>
+
+        <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;y_coord&quot;</span><span class="p">:</span>
+            <span class="n">name_ok</span> <span class="o">=</span> <span class="s2">&quot;y_coord&quot;</span> <span class="ow">in</span> <span class="n">name_lower</span> <span class="ow">or</span> <span class="s2">&quot;ycoord&quot;</span> <span class="ow">in</span> <span class="n">name_lower</span>
+            <span class="n">range_ok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_projected_coord</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">name_ok</span> <span class="ow">or</span> <span class="n">range_ok</span>
+
+        <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;zip_code&quot;</span> <span class="ow">or</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;zip5&quot;</span> <span class="ow">or</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;zip9&quot;</span><span class="p">:</span>
+            <span class="n">name_ok</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">k</span> <span class="ow">in</span> <span class="n">name_lower</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;zip&quot;</span><span class="p">,</span> <span class="s2">&quot;postal&quot;</span><span class="p">))</span>
+            <span class="n">pattern_ok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_zip_pattern</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">name_ok</span> <span class="ow">or</span> <span class="n">pattern_ok</span>
+
+        <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;state_code&quot;</span><span class="p">:</span>
+            <span class="n">name_ok</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">k</span> <span class="ow">in</span> <span class="n">name_lower</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="s2">&quot;st&quot;</span><span class="p">,</span> <span class="s2">&quot;state_code&quot;</span><span class="p">))</span>
+            <span class="n">pattern_ok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_state_code_pattern</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">name_ok</span> <span class="ow">or</span> <span class="n">pattern_ok</span>
+
+        <span class="k">if</span> <span class="n">label</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;point&quot;</span><span class="p">,</span> <span class="s2">&quot;polygon&quot;</span><span class="p">,</span> <span class="s2">&quot;multi-polygon&quot;</span><span class="p">,</span> <span class="s2">&quot;line&quot;</span><span class="p">,</span> <span class="s2">&quot;multi-line&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_wkt_geometry</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="kc">True</span>  <span class="c1"># Unknown type, assume valid</span>
+
+<div class="viewcode-block" id="HybridGeoClassifier.predict_batch">
+<a class="viewcode-back" href="../../api.html#profiler.spatial.HybridGeoClassifier.predict_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">predict_batch</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">columns_data</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">]],</span>
+        <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mf">0.85</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Batch prediction with rule validation for multiple columns.</span>
+
+<span class="sd">        Uses single forward pass for ML prediction, then validates each result.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            columns_data: List of (column_name, sample_values) tuples</span>
+<span class="sd">            threshold: Confidence threshold</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of prediction dicts for each column</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">columns_data</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+
+        <span class="c1"># Format all inputs for batch ML prediction</span>
+        <span class="n">texts</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">columns_data</span><span class="p">:</span>
+            <span class="n">values_str</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">[:</span><span class="mi">5</span><span class="p">])</span>
+            <span class="n">texts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">column_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">values_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># BATCH ML prediction - single forward pass!</span>
+        <span class="n">ml_results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ml</span><span class="o">.</span><span class="n">predict_batch</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">)</span>
+
+        <span class="c1"># Validate each result with rules</span>
+        <span class="n">final_results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">column_name</span><span class="p">,</span> <span class="n">values</span><span class="p">),</span> <span class="n">ml_pred</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">columns_data</span><span class="p">,</span> <span class="n">ml_results</span><span class="p">):</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="n">ml_pred</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span>
+            <span class="n">confidence</span> <span class="o">=</span> <span class="n">ml_pred</span><span class="p">[</span><span class="s2">&quot;confidence&quot;</span><span class="p">]</span>
+
+            <span class="c1"># If already non_spatial (from threshold), keep it</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;non_spatial&quot;</span><span class="p">:</span>
+                <span class="n">final_results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;non_spatial&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="n">confidence</span><span class="p">,</span>
+                        <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="s2">&quot;ml_low_conf&quot;</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># Validate spatial types with rules</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">VALIDATE_TYPES</span><span class="p">:</span>
+                <span class="n">is_valid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_prediction</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">is_valid</span><span class="p">:</span>
+                    <span class="n">final_results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">label</span><span class="p">,</span>
+                            <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="n">confidence</span><span class="p">,</span>
+                            <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="s2">&quot;ml+validated&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;validated&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                        <span class="s2">&quot;HybridGeo batch: </span><span class="si">%s</span><span class="s2"> -&gt; </span><span class="si">%s</span><span class="s2"> rejected&quot;</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">label</span>
+                    <span class="p">)</span>
+                    <span class="n">final_results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;non_spatial&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">,</span>
+                            <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;ml:</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">→rejected&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;validated&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># No validation needed</span>
+                <span class="n">final_results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">label</span><span class="p">,</span>
+                        <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="n">confidence</span><span class="p">,</span>
+                        <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="s2">&quot;ml&quot;</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">final_results</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Eden Wu.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,16 @@
+Changelog
+=========
+
+Version 0.0.2 (Current)
+------------------------
+
+- Added spatial ML classifier integration
+- Improved temporal coverage detection
+- Enhanced numerical profiling
+
+Version 0.0.1
+-------------
+
+- Initial release
+- Basic profiling functionality
+- Support for CSV/TSV and DataFrame inputs
