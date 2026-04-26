@@ -56,7 +56,6 @@ class RuleBasedCTA:
         "latitude": {
             "patterns": [
                 r"(?i)^lat(itude)?$",
-                r"(?i)^y_?coord(inate)?$",
                 r"(?i)^(geo_?)?lat(itude)?$",
                 r"(?i)^(point_?)?lat$",
                 r"(?i)^lat_?(dd|deg|decimal)$",
@@ -68,7 +67,6 @@ class RuleBasedCTA:
             "patterns": [
                 r"(?i)^lon(g|gitude)?$",
                 r"(?i)^lng$",
-                r"(?i)^x_?coord(inate)?$",
                 r"(?i)^(geo_?)?lon(gitude)?$",
                 r"(?i)^(point_?)?lon$",
                 r"(?i)^lon_?(dd|deg|decimal)$",

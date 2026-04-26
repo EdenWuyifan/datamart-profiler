@@ -1,41 +1,95 @@
-# atlas-profiler - CTA (Column Type Annotation)
+# atlas-profiler
 
-A machine learning pipeline for spatial column type classification with rule-based validation.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![PyPI](https://img.shields.io/pypi/v/atlas-profiler.svg)](https://pypi.org/project/atlas-profiler/)
+[![GitHub](https://img.shields.io/badge/github-VIDA--NYU%2Fatlas--profiler-brightgreen.svg)](https://github.com/VIDA-NYU/atlas-profiler)
 
-## Overview
+Atlas Profiler is a dataset profiling library. Given a CSV/TSV, file-like object, or pandas DataFrame, it returns JSON-style metadata about the dataset, its columns, detected types, value ranges, optional plots, spatial/temporal coverage, and profiling runtime.
 
-This system classifies tabular columns into spatial types (latitude, longitude, BBL, BIN, zip codes, geometries, etc.) using a hybrid ML + rules approach.
+The package builds on the Datamart Profiler workflow and adds an ML-assisted spatial column classifier. That classifier is only one part of the profiler: non-spatial columns still go through the core rule-based type detection, statistics, plots, coverage, and dataset-summary pipeline.
 
-**Supported Column Types:**
+## What It Produces
 
-- `latitude`, `longitude` - Geographic coordinates
-- `x_coord`, `y_coord` - Projected coordinates
-- `bbl` - Borough-Block-Lot (NYC property identifier)
-- `bin` - Building Identification Number
-- `zip_code` - Postal codes (worldwide)
-- `borough_code` - District/borough codes
-- `city`, `state`, `address` - Location strings
-- `point`, `line`, `polygon`, `multi-polygon`, `multi-line` - WKT geometries
-- `non_spatial` - Non-spatial identifiers
+`process_dataset(...)` returns a metadata dictionary with fields such as:
 
----
+- Dataset size, row count, profiled row count, and column count.
+- Per-column structural type, semantic types, missing/unclean value ratios, distinct counts, and optional plots.
+- Dataset-level type summary: numerical, categorical, spatial, and temporal.
+- Spatial coverage from lat/long pairs, WKT points, resolved addresses, and administrative areas.
+- Temporal coverage and temporal resolution for datetime columns.
+- Attribute keywords derived from column names.
+- Optional random sample rows and per-step profiling timings.
 
-## Disclaimer
+## Core Type System
 
-This project reuses the structure and main logic of Datamart Profiler. Please give credit to:
+The profiler detects broad structural types for all columns:
 
-- Datamart Profiler (codebase): https://gitlab.com/ViDA-NYU/auctus/auctus
-- Datamart Profiler (PyPI): https://pypi.org/project/datamart-profiler/
+| Structural type | Meaning |
+| --- | --- |
+| `MissingData` | Empty column. |
+| `Integer` | Integer-like values. |
+| `Float` | Floating point values. |
+| `Text` | String/text values. |
+| `Boolean` | Boolean-like values such as true/false, yes/no, 0/1. |
+| `GeoCoordinates` | Point geometry or coordinate-pair strings. |
+| `GeoShape` | Polygon-like geometry. |
 
----
+It also annotates semantic types when evidence is available:
 
-## PyPI Usage
+| Semantic type | Examples |
+| --- | --- |
+| `DateTime` | Dates, timestamps, and year columns. |
+| `latitude`, `longitude` | Coordinate columns, paired after profiling. |
+| `address`, `AdministrativeArea` | Address-like and admin-area text, optionally resolved with Nominatim or `datamart_geo`. |
+| `URL`, `FileName`, `identifier`, `Enumeration` | URLs, file paths, IDs, and categorical columns. |
 
-Install from PyPI and call the exported function:
+## Spatial ML Classifier
+
+When `geo_classifier=True`, Atlas Profiler creates a `HybridGeoClassifier(GeoClassifier())`. It samples values from each column, predicts spatial labels in one batch, validates sensitive predictions with rules, and passes accepted labels into the normal profiler type system.
+
+The classifier labels are not the full profiler type system. They are a spatial CTA layer mapped into profiler structural and semantic types:
+
+| Classifier label family | Mapped profiler behavior |
+| --- | --- |
+| `latitude`, `longitude` | Float columns with latitude/longitude semantic types, then paired for coverage. |
+| `x_coord`, `y_coord` | Projected coordinate-like float columns. |
+| `point`, `line`, `polygon`, `multi-line`, `multi-polygon` | Geometry columns mapped to point or shape structural types. |
+| `zip5`, `zip9`, `address` | Text columns with address semantics. |
+| `borough`, `borough_code`, `city`, `state`, `state_code`, `country` | Text columns with administrative-area semantics. |
+| `bbl`, `bin` | NYC spatial identifiers mapped as integer identifiers. |
+| `non_spatial` | Falls back to the core profiler's normal type detection. |
+
+Manual column annotations take precedence over ML predictions. Low-confidence or rule-rejected ML predictions also fall back to the regular profiler workflow.
+
+## Pipeline
+
+`process_dataset` runs the same high-level workflow for every dataset:
+
+1. Load data from a path, file object, or DataFrame.
+2. Compute cheap full-data stats and sample values for each column.
+3. Optionally run a single batch spatial ML prediction for all non-manual columns.
+4. Process every column with either an accepted geo prediction or the regular profiler type detector.
+5. Pair latitude/longitude columns and compute dataset-level type counts.
+6. Optionally compute numerical ranges, histograms, spatial coverage, temporal coverage, keywords, samples, and timing metadata.
+
+The regular type detector recognizes integers, floats, text, booleans, URLs, file paths, WKT points/polygons, categorical values, IDs, datetimes, latitude/longitude name patterns, and optional administrative areas.
+
+## Installation
 
 ```bash
 pip install atlas-profiler
 ```
+
+For source development:
+
+```bash
+git clone https://github.com/VIDA-NYU/atlas-profiler.git
+cd atlas-profiler
+pip install -e .
+```
+
+## Basic Usage
 
 ```python
 from atlas_profiler import process_dataset
@@ -43,517 +97,75 @@ from atlas_profiler import process_dataset
 metadata = process_dataset("data.csv")
 ```
 
-Key parameters for `process_dataset`:
+`process_dataset` also accepts a pandas DataFrame:
 
 ```python
 metadata = process_dataset(
-    data,
+    df,
     geo_classifier=True,
     geo_classifier_threshold=0.5,
-    include_sample=False,
     coverage=True,
     plots=False,
-    indexes=True,
-    load_max_size=None,
-    metadata=None,
-    nominatim=None,
+    include_sample=False,
 )
 ```
 
-- `data`: Path to a dataset, a file-like object, or a pandas DataFrame.
-- `geo_classifier`: `True` to enable the default ML classifier, or pass a classifier instance.
-- `geo_classifier_threshold`: Confidence cutoff for classifier predictions; below this is treated as `non_spatial`.
-- `include_sample`: `True` to include a small random CSV sample in the output metadata.
-- `coverage`: Compute data ranges (spatial/temporal coverage) when `True`.
-- `plots`: Include plots in the output metadata when `True`.
-- `indexes`: If `True`, include non-default DataFrame indexes as columns.
-- `load_max_size`: Target max bytes to load; larger inputs are randomly sampled (defaults to `MAX_SIZE`, 5000000 bytes).
-- `metadata`: Optional seed metadata dict (e.g., from a discovery plugin).
-- `nominatim`: Base URL of a Nominatim server for resolving address strings.
+Key parameters:
 
----
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `data` | required | Path, file-like object, or pandas DataFrame. |
+| `geo_classifier` | `True` | Enable the default hybrid spatial classifier, disable with `False`, or pass a classifier instance. |
+| `geo_classifier_threshold` | `0.5` | Confidence cutoff for spatial ML predictions. |
+| `coverage` | `True` | Compute numerical ranges plus spatial/temporal coverage. |
+| `plots` | `False` | Add compact histogram-style plot data to column metadata. |
+| `include_sample` | `False` | Include a small deterministic CSV sample in the output. |
+| `indexes` | `True` | Preserve non-default DataFrame indexes as columns. |
+| `load_max_size` | `5000000` | Target bytes to profile; larger inputs are sampled. |
+| `metadata` | `None` | Optional seed metadata, including manual annotations. |
+| `nominatim` | `None` | Optional Nominatim endpoint for resolving address strings. |
+| `datamart_geo_data` | `None` | `True` or a `datamart_geo.GeoData` instance for administrative-area resolution. |
 
-## Training (from source)
+## Manual Annotations
 
-Clone the repo before running training scripts:
+Manual annotations can be supplied through the `metadata` argument. They are useful when a user or upstream discovery step already knows a column's type. Manually annotated columns skip the spatial ML classifier and are reconciled with observed values during normal column processing.
 
-```bash
-git clone https://github.com/VIDA-NYU/atlas-profiler.git
-cd atlas-profiler
-```
+## Model Files
 
-Training scripts and datasets live under `training/`.
+`GeoClassifier()` first looks for bundled model files under `profiler/model/`. If they are not present, it uses a user cache directory and downloads missing files when `auto_download=True`.
 
-## Pipeline Workflow
+Required model files:
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  1. DATA GENERATION                                                      │
-│     training/generate_synthetic_cta.py                                   │
-│     curated_spatial_cta.csv  ──►  LLM augmentation  ──►  synthetic_df.csv│
-└───────────────────────────────────────┬─────────────────────────────────┘
-                                        │
-                                        ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  2. MODEL TRAINING                                                       │
-│     training/train_cta_classifier.py                                     │
-│     curated + synthetic data  ──►  BGE encoder + classifier  ──►  model/ │
-└───────────────────────────────────────┬─────────────────────────────────┘
-                                        │
-                                        ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  3. INFERENCE + VALIDATION                                               │
-│     training/inference_cta.py + training/rules_cta.py                    │
-│     ML prediction  ──►  rule-based validation  ──►  final classification │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+- `model.pt`
+- `config.json`
+- `label_encoder.json`
 
----
-
-## Step 1: Generate Synthetic Training Data
-
-**Script:** `training/generate_synthetic_cta.py`
-
-Uses an LLM to augment curated examples with diverse variations:
-
-- **Naming styles:** snake_case, camelCase, abbreviations, short/ambiguous names
-- **Value diversity:** Worldwide locations (not limited to NYC)
-- **Short name samples:** Forces value-based learning (e.g., `x`, `lt`, `coord`)
-
-```bash
-# Generate synthetic data (default: 120 samples per class)
-python training/generate_synthetic_cta.py \
-    --target 120 \
-    --curated-csv training/curated_spatial_cta.csv \
-    --output training/synthetic_df.csv
-
-# Custom settings
-python training/generate_synthetic_cta.py \
-    --target 150 \
-    --max-stale 15 \
-    --curated-csv training/curated_spatial_cta.csv \
-    --output training/synthetic_df.csv
-```
-
-**Inputs:**
-
-- `training/curated_spatial_cta.csv` - Hand-labeled training examples
-
-**Outputs:**
-
-- `training/synthetic_df.csv` - Augmented training data
-- `training/synthetic_df_checkpoint.csv` - Incremental checkpoint (for resuming)
-
----
-
-## Step 2: Train the CTA Classifier
-
-**Script:** `training/train_cta_classifier.py`
-
-Trains a transformer-based classifier using [BGE-small](https://huggingface.co/BAAI/bge-small-en-v1.5) as the encoder.
-
-### Training Modes
-
-| Mode             | Description                              | Best For          |
-| ---------------- | ---------------------------------------- | ----------------- |
-| `classification` | Standard cross-entropy loss              | Fast baseline     |
-| `contrastive`    | Supervised contrastive learning (SupCon) | Better embeddings |
-| `combined`       | Contrastive + classification loss        | **Recommended**   |
-
-### Input Format
-
-Uses structured tokens for emphasis:
-
-```
-[COL] column_name [COL] column_name [COL] column_name [VAL] val1 [VAL] val2 [VAL] val3
-```
-
-Column name is repeated (default: 3×) to emphasize its importance.
-
-### Usage
-
-```bash
-# Standard classification (fast)
-python training/train_cta_classifier.py --mode classification --epochs 10
-
-# Supervised contrastive learning (better embeddings)
-python training/train_cta_classifier.py --mode contrastive --epochs 20 --temperature 0.07
-
-# Combined training (recommended)
-python training/train_cta_classifier.py --mode combined --epochs 15 --alpha 0.5
-
-# Full configuration
-python training/train_cta_classifier.py \
-    --mode combined \
-    --epochs 20 \
-    --batch_size 32 \
-    --lr 3e-5 \
-    --temperature 0.07 \
-    --alpha 0.5 \
-    --name_repeat 3 \
-    --output_dir profiler/model \
-    --curated_path training/curated_spatial_cta.csv \
-    --synthetic_path training/synthetic_df.csv
-```
-
-### Key Arguments
-
-| Argument        | Default          | Description                             |
-| --------------- | ---------------- | --------------------------------------- |
-| `--mode`        | `classification` | Training mode                           |
-| `--epochs`      | `10`             | Number of training epochs               |
-| `--batch_size`  | `16`             | Batch size                              |
-| `--lr`          | `2e-5`           | Learning rate                           |
-| `--temperature` | `0.07`           | Contrastive loss temperature            |
-| `--alpha`       | `0.5`            | Contrastive loss weight (combined mode) |
-| `--name_repeat` | `3`              | Column name repetition count            |
-| `--output_dir`  | `./model`        | Model output directory                  |
-
-**Outputs (in `--output_dir`, default `./model/`):**
-
-- `model.pt` - Trained model weights
-- `label_encoder.json` - Class labels and config
-- `config.json` - Encoder configuration
-- `tokenizer_config.json` - Tokenizer with special tokens
-
----
-
-## Step 3: Inference with Rule-Based Validation
-
-### Pure ML Inference
-
-**Script:** `training/inference_cta.py`
-
-```bash
-# Text input
-python training/inference_cta.py --model_dir profiler/model --text "lat: 40.71, 40.72, 40.73"
-
-# Column + values input
-python training/inference_cta.py --model_dir profiler/model --column "BOROUGH" --values "Manhattan, Brooklyn, Queens"
-
-# With confidence threshold (returns non_spatial if below)
-python training/inference_cta.py --model_dir profiler/model --text "col1: 123, 456" --threshold 0.5
-
-# Get embeddings (contrastive/combined modes only)
-python training/inference_cta.py --model_dir profiler/model --text "lat: 40.71" --embedding
-```
-
-### Hybrid Classification (ML + Rules)
-
-**Script:** `training/rules_cta.py`
-
-The `HybridCTAClassifier` combines ML predictions with rule-based validation:
-
-Note: imports below assume `training/` is on your `PYTHONPATH` or you run from that directory.
-
-```python
-from rules_cta import HybridCTAClassifier
-from inference_cta import CTAClassifier
-
-# Initialize
-ml_classifier = CTAClassifier("profiler/model")
-hybrid = HybridCTAClassifier(ml_classifier)
-
-# Classify
-result = hybrid.classify("BBL", [1001234567, 2005678901, 3012345678])
-# Returns: [{"label": "bbl", "confidence": 0.95, "source": "ml+validated"}]
-```
-
-### Validation Logic
-
-For sensitive spatial types, ML predictions are validated against rules:
-
-| Type                     | Validation Rule                                 |
-| ------------------------ | ----------------------------------------------- |
-| `bbl`                    | 10-digit number starting with 1-5 (NYC borough) |
-| `bin`                    | 7-digit number starting with 1-5                |
-| `latitude`               | Values in range [-90, 90]                       |
-| `longitude`              | Values in range [-180, 180], some > 90          |
-| `x_coord`, `y_coord`     | Projected coordinates > 10,000                  |
-| `zip_code`               | Matches postal code patterns (US, UK, CA, etc.) |
-| `point`, `polygon`, etc. | Valid WKT geometry format                       |
-
-**Validation outcomes:**
-
-- ✅ **Passed:** Return ML prediction with `source: "ml+validated"`
-- ❌ **Failed:** Return `non_spatial` with `source: "ml:{type}→rule_rejected"`
-
-### Standalone Rule-Based Classification
-
-```python
-from rules_cta import RuleBasedCTA
-
-classifier = RuleBasedCTA()
-
-# Single column
-result = classifier.classify("BBL", [1001234567, 2005678901])
-# {"label": "bbl", "confidence": 0.95, "rule": "bbl_name_and_pattern"}
-
-# Entire DataFrame
-results = classifier.classify_dataframe(df, sample_size=100)
-```
-
----
+CTA model training, synthetic data generation, and standalone CTA inference are documented in [`training/README.md`](training/README.md).
 
 ## Project Structure
 
-```
+```text
 atlas-profiler/
-├── profiler/                   # Library package
-│   ├── core.py
-│   ├── spatial.py
-│   └── model/                  # Bundled model artifacts
-│       ├── model.pt
-│       ├── label_encoder.json
-│       ├── config.json
-│       └── tokenizer_config.json
-├── training/                   # Training + inference scripts/data
-│   ├── generate_synthetic_cta.py
-│   ├── train_cta_classifier.py
-│   ├── inference_cta.py
-│   ├── rules_cta.py
-│   ├── curated_spatial_cta.csv
-│   └── synthetic_df.csv
-├── output/
-├── results/
+├── atlas_profiler/          # Public import shim: from atlas_profiler import process_dataset
+├── profiler/                # Runtime profiling package
+│   ├── core.py              # process_dataset, loading, column pipeline, coverage
+│   ├── profile_types.py     # Rule-based structural/semantic type detection
+│   ├── spatial.py           # Spatial coverage, geohashing, GeoClassifier integration
+│   ├── temporal.py          # Date parsing and temporal resolution
+│   ├── numerical.py         # Numeric summaries and ranges
+│   └── types.py             # Type constants
+├── training/                # CTA data generation, model training, standalone inference
+├── tests/                   # Unit tests
+├── examples/                # Example notebooks
 ├── README.md
 └── pyproject.toml
 ```
 
----
+## Relationship To Datamart Profiler
 
-## Quick Start
+This project reuses the structure and main profiling logic of Datamart Profiler, with additional spatial CTA model integration.
 
-Clone the repo and `cd` into it before running the training steps below.
+Credits:
 
-```bash
-# 1. Generate synthetic training data
-python training/generate_synthetic_cta.py \
-    --target 120 \
-    --curated-csv training/curated_spatial_cta.csv \
-    --output training/synthetic_df.csv
-
-# 2. Train the model (combined mode recommended)
-python training/train_cta_classifier.py \
-    --mode combined \
-    --epochs 15 \
-    --output_dir profiler/model \
-    --curated_path training/curated_spatial_cta.csv \
-    --synthetic_path training/synthetic_df.csv
-
-# 3. Run inference
-python training/inference_cta.py --model_dir profiler/model --column "latitude" --values "40.71, 40.72"
-```
-
----
-
-## Auctus Datamart Profiler Integration
-
-This section describes how the CTA classifier integrates with the [Auctus datamart profiler](https://gitlab.com/ViDA-NYU/auctus/datamart-profiler).
-
-### Original Profiler Workflow (Before Geo Classifier)
-
-The original `process_dataset()` function in `core.py` followed this sequential workflow:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  process_dataset(data)                                                       │
-│                                                                              │
-│  ┌──────────────────┐                                                        │
-│  │ 1. LOAD DATA     │  load_data() → pandas DataFrame                        │
-│  │    - Read CSV    │  - Handle file size limits (MAX_SIZE = 5MB)            │
-│  │    - Sample rows │  - Random sampling if file > max size                  │
-│  └────────┬─────────┘                                                        │
-│           │                                                                  │
-│           ▼                                                                  │
-│  ┌──────────────────┐                                                        │
-│  │ 2. PROCESS COLS  │  For each column (sequential):                         │
-│  │    (sequential)  │                                                        │
-│  │                  │  process_column(array, column_meta)                    │
-│  │                  │    │                                                   │
-│  │                  │    ├─► identify_types()  ← regex + heuristics          │
-│  │                  │    │     - Structural: INTEGER, FLOAT, TEXT, GEO_*     │
-│  │                  │    │     - Semantic: LATITUDE, LONGITUDE, DATE_TIME,   │
-│  │                  │    │                 ADDRESS, ADMIN, CATEGORICAL       │
-│  │                  │    │                                                   │
-│  │                  │    ├─► Compute numerical ranges & histograms           │
-│  │                  │    ├─► Resolve addresses via Nominatim (HTTP calls)    │
-│  │                  │    └─► Resolve admin areas via datamart_geo            │
-│  └────────┬─────────┘                                                        │
-│           │                                                                  │
-│           ▼                                                                  │
-│  ┌──────────────────┐                                                        │
-│  │ 3. POST-PROCESS  │                                                        │
-│  │                  │  - Index textual data with Lazo                        │
-│  │                  │  - Pair lat/long columns (name matching)               │
-│  │                  │  - Determine dataset types (spatial/temporal/etc.)     │
-│  └────────┬─────────┘                                                        │
-│           │                                                                  │
-│           ▼                                                                  │
-│  ┌──────────────────┐                                                        │
-│  │ 4. COVERAGE      │  Compute spatial/temporal coverage:                    │
-│  │                  │  - Lat/long pairs → geohashes + bounding boxes         │
-│  │                  │  - WKT points → spatial ranges                         │
-│  │                  │  - Addresses → resolved coordinates                    │
-│  │                  │  - Admin areas → merged bounding boxes                 │
-│  │                  │  - Datetime columns → temporal ranges                  │
-│  └──────────────────┘                                                        │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Original Type Detection (`identify_types`)
-
-The original `identify_types()` function used **regex patterns and heuristics**:
-
-| Detection Method     | Types Detected                                               | Limitations                                     |
-| -------------------- | ------------------------------------------------------------ | ----------------------------------------------- |
-| Column name patterns | `latitude`, `longitude` (via `LATITUDE`, `LONGITUDE` tuples) | Only exact matches like `lat`, `long`, `xcoord` |
-| Value regex          | `DATE_TIME`, `GEO_POINT` (WKT)                               | Limited patterns                                |
-| Statistical analysis | `INTEGER`, `FLOAT`, `CATEGORICAL`                            | No semantic understanding                       |
-| Nominatim lookup     | `ADDRESS`                                                    | Slow (HTTP calls per address)                   |
-| datamart_geo lookup  | `ADMIN` areas                                                | Requires local geo database                     |
-
-**Key limitations:**
-
-- ❌ Failed to detect borough codes, BBL, BIN
-- ❌ No detection of projected coordinates (x_coord, y_coord)
-- ❌ Missed WKT polygons and multi-polygons
-- ❌ Sequential column processing (slow for large datasets)
-
-### Enhanced Workflow (With Geo Classifier)
-
-The geo classifier adds a **batch ML prediction phase** before column processing:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  process_dataset(data, geo_classifier=HybridGeoClassifier)                   │
-│                                                                              │
-│  ┌──────────────────┐                                                        │
-│  │ 1. LOAD DATA     │  (unchanged)                                           │
-│  └────────┬─────────┘                                                        │
-│           │                                                                  │
-│           ▼                                                                  │
-│  ┌──────────────────┐                                                        │
-│  │ 2. BATCH ML      │  ★ NEW: Single forward pass for ALL columns            │
-│  │    PREDICTION    │                                                        │
-│  │                  │  geo_classifier.predict_batch([                        │
-│  │                  │      (col_name, sample_values),                        │
-│  │                  │      ...                                               │
-│  │                  │  ])                                                    │
-│  │                  │                                                        │
-│  │                  │  → Returns: {col_idx: {"label", "confidence"}}         │
-│  │                  │                                                        │
-│  │                  │  Detected types:                                       │
-│  │                  │    latitude, longitude, x_coord, y_coord,              │
-│  │                  │    bbl, bin, zip_code, borough_code,                   │
-│  │                  │    city, state, address, point, polygon, ...           │
-│  └────────┬─────────┘                                                        │
-│           │                                                                  │
-│           ▼                                                                  │
-│  ┌──────────────────┐                                                        │
-│  │ 3. PROCESS COLS  │  ★ NOW PARALLEL (ThreadPoolExecutor)                   │
-│  │    (parallel)    │                                                        │
-│  │                  │  process_column(..., geo_prediction=pred)              │
-│  │                  │    │                                                   │
-│  │                  │    ├─► If geo_prediction exists & spatial type:        │
-│  │                  │    │     Use ML result directly (skip identify_types)  │
-│  │                  │    │                                                   │
-│  │                  │    └─► Else: Fall back to identify_types()             │
-│  └────────┬─────────┘                                                        │
-│           │                                                                  │
-│           ▼                                                                  │
-│  ┌──────────────────┐                                                        │
-│  │ 4-5. POST-PROC   │  (unchanged)                                           │
-│  │    + COVERAGE    │                                                        │
-│  └──────────────────┘                                                        │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Type Mapping (`GEO_CLASSIFIER_SPATIAL_MAP`)
-
-The geo classifier maps ML labels to Auctus type system:
-
-```python
-GEO_CLASSIFIER_SPATIAL_MAP = {
-    # Coordinates
-    "latitude":      (types.FLOAT, [types.LATITUDE]),
-    "longitude":     (types.FLOAT, [types.LONGITUDE]),
-    "x_coord":       (types.FLOAT, []),
-    "y_coord":       (types.FLOAT, []),
-
-    # Geometries
-    "point":         (types.GEO_POINT, []),
-    "polygon":       (types.GEO_POLYGON, []),
-    "multi-polygon": (types.GEO_POLYGON, []),
-    "line":          (types.GEO_POLYGON, []),
-
-    # Addresses
-    "zip_code":      (types.TEXT, [types.ADDRESS]),
-    "address":       (types.TEXT, [types.ADDRESS]),
-
-    # Administrative
-    "borough_code":  (types.TEXT, [types.ADMIN]),
-    "city":          (types.TEXT, [types.ADMIN]),
-    "state":         (types.TEXT, [types.ADMIN]),
-
-    # NYC-specific
-    "bbl":           (types.INTEGER, [types.ID]),
-    "bin":           (types.INTEGER, [types.ID]),
-}
-```
-
-### Performance Improvements
-
-| Aspect            | Original                    | With Geo Classifier                          |
-| ----------------- | --------------------------- | -------------------------------------------- |
-| Type detection    | Sequential regex per column | **Single batch forward pass**                |
-| Column processing | Sequential                  | **Parallel (ThreadPoolExecutor)**            |
-| Spatial types     | Limited (lat/lon only)      | **15+ types** including BBL, BIN, geometries |
-| Accuracy          | Heuristic-based             | **ML + rule validation**                     |
-
-### Usage in Auctus
-
-```python
-from profiler import process_dataset
-from profiler.spatial import GeoClassifier, HybridGeoClassifier
-
-# Initialize classifier (auto-downloads model from NYU Box)
-geo_clf = HybridGeoClassifier(GeoClassifier())
-
-# Profile dataset with geo classifier
-metadata = process_dataset(
-    "data.csv",
-    geo_classifier=geo_clf,  # Enable ML-based type detection
-    coverage=True,
-    plots=True,
-)
-
-# Results include geo_classifier metadata
-for col in metadata["columns"]:
-    if "geo_classifier" in col:
-        print(f"{col['name']}: {col['geo_classifier']}")
-        # {'label': 'latitude', 'confidence': 0.97, 'source': 'ml+validated'}
-```
-
-### Model Auto-Download
-
-The `GeoClassifier` automatically downloads model files from NYU Box on first use:
-
-```python
-GEO_MODEL_FILES = {
-    "model.pt":           "https://nyu.box.com/shared/static/...",
-    "config.json":        "https://nyu.box.com/shared/static/...",
-    "label_encoder.json": "https://nyu.box.com/shared/static/...",
-}
-```
-
----
-
-## Environment Variables
-
-For synthetic data generation with LLM:
-
-```bash
-export PORTKEY_API_KEY="..."
-export PROVIDER_API_KEY="..."
-```
+- Datamart Profiler codebase: https://gitlab.com/ViDA-NYU/auctus/auctus
+- Datamart Profiler on PyPI: https://pypi.org/project/datamart-profiler/
