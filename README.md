@@ -1,5 +1,10 @@
 # atlas-profiler
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![PyPI](https://img.shields.io/pypi/v/atlas-profiler.svg)](https://pypi.org/project/atlas-profiler/)
+[![GitHub](https://img.shields.io/badge/github-VIDA--NYU%2Fatlas--profiler-brightgreen.svg)](https://github.com/VIDA-NYU/atlas-profiler)
+
 Atlas Profiler is a dataset profiling library. Given a CSV/TSV, file-like object, or pandas DataFrame, it returns JSON-style metadata about the dataset, its columns, detected types, value ranges, optional plots, spatial/temporal coverage, and profiling runtime.
 
 The package builds on the Datamart Profiler workflow and adds an ML-assisted spatial column classifier. That classifier is only one part of the profiler: non-spatial columns still go through the core rule-based type detection, statistics, plots, coverage, and dataset-summary pipeline.
