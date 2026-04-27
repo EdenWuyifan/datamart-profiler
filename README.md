@@ -3,85 +3,22 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/atlas-profiler.svg)](https://pypi.org/project/atlas-profiler/)
+[![Documentation](https://img.shields.io/badge/docs-ReadTheDocs-blue.svg)](https://atlas-profiler.readthedocs.io/en/latest/)
 [![GitHub](https://img.shields.io/badge/github-VIDA--NYU%2Fatlas--profiler-brightgreen.svg)](https://github.com/VIDA-NYU/atlas-profiler)
 
-Atlas Profiler is a dataset profiling library. Given a CSV/TSV, file-like object, or pandas DataFrame, it returns JSON-style metadata about the dataset, its columns, detected types, value ranges, optional plots, spatial/temporal coverage, and profiling runtime.
+**Atlas Profiler** is a comprehensive dataset profiling library that automatically detects and annotates data types, including spatial and temporal features. Given a CSV/TSV, file-like object, or pandas DataFrame, it returns rich JSON-style metadata about your dataset, its columns, detected types, value ranges, optional plots, spatial/temporal coverage, and profiling runtime.
 
-The package builds on the Datamart Profiler workflow and adds an ML-assisted spatial column classifier. That classifier is only one part of the profiler: non-spatial columns still go through the core rule-based type detection, statistics, plots, coverage, and dataset-summary pipeline.
+## Quick Start
 
-## What It Produces
+### Installation
 
-`process_dataset(...)` returns a metadata dictionary with fields such as:
-
-- Dataset size, row count, profiled row count, and column count.
-- Per-column structural type, semantic types, missing/unclean value ratios, distinct counts, and optional plots.
-- Dataset-level type summary: numerical, categorical, spatial, and temporal.
-- Spatial coverage from lat/long pairs, WKT points, resolved addresses, and administrative areas.
-- Temporal coverage and temporal resolution for datetime columns.
-- Attribute keywords derived from column names.
-- Optional random sample rows and per-step profiling timings.
-
-## Core Type System
-
-The profiler detects broad structural types for all columns:
-
-| Structural type | Meaning |
-| --- | --- |
-| `MissingData` | Empty column. |
-| `Integer` | Integer-like values. |
-| `Float` | Floating point values. |
-| `Text` | String/text values. |
-| `Boolean` | Boolean-like values such as true/false, yes/no, 0/1. |
-| `GeoCoordinates` | Point geometry or coordinate-pair strings. |
-| `GeoShape` | Polygon-like geometry. |
-
-It also annotates semantic types when evidence is available:
-
-| Semantic type | Examples |
-| --- | --- |
-| `DateTime` | Dates, timestamps, and year columns. |
-| `latitude`, `longitude` | Coordinate columns, paired after profiling. |
-| `address`, `AdministrativeArea` | Address-like and admin-area text, optionally resolved with Nominatim or `datamart_geo`. |
-| `URL`, `FileName`, `identifier`, `Enumeration` | URLs, file paths, IDs, and categorical columns. |
-
-## Spatial ML Classifier
-
-When `geo_classifier=True`, Atlas Profiler creates a `HybridGeoClassifier(GeoClassifier())`. It samples values from each column, predicts spatial labels in one batch, validates sensitive predictions with rules, and passes accepted labels into the normal profiler type system.
-
-The classifier labels are not the full profiler type system. They are a spatial CTA layer mapped into profiler structural and semantic types:
-
-| Classifier label family | Mapped profiler behavior |
-| --- | --- |
-| `latitude`, `longitude` | Float columns with latitude/longitude semantic types, then paired for coverage. |
-| `x_coord`, `y_coord` | Projected coordinate-like float columns. |
-| `point`, `line`, `polygon`, `multi-line`, `multi-polygon` | Geometry columns mapped to point or shape structural types. |
-| `zip5`, `zip9`, `address` | Text columns with address semantics. |
-| `borough`, `borough_code`, `city`, `state`, `state_code`, `country` | Text columns with administrative-area semantics. |
-| `bbl`, `bin` | NYC spatial identifiers mapped as integer identifiers. |
-| `non_spatial` | Falls back to the core profiler's normal type detection. |
-
-Manual column annotations take precedence over ML predictions. Low-confidence or rule-rejected ML predictions also fall back to the regular profiler workflow.
-
-## Pipeline
-
-`process_dataset` runs the same high-level workflow for every dataset:
-
-1. Load data from a path, file object, or DataFrame.
-2. Compute cheap full-data stats and sample values for each column.
-3. Optionally run a single batch spatial ML prediction for all non-manual columns.
-4. Process every column with either an accepted geo prediction or the regular profiler type detector.
-5. Pair latitude/longitude columns and compute dataset-level type counts.
-6. Optionally compute numerical ranges, histograms, spatial coverage, temporal coverage, keywords, samples, and timing metadata.
-
-The regular type detector recognizes integers, floats, text, booleans, URLs, file paths, WKT points/polygons, categorical values, IDs, datetimes, latitude/longitude name patterns, and optional administrative areas.
-
-## Installation
+Install from PyPI:
 
 ```bash
 pip install atlas-profiler
 ```
 
-For source development:
+Or install from source for development:
 
 ```bash
 git clone https://github.com/VIDA-NYU/atlas-profiler.git
@@ -89,83 +26,214 @@ cd atlas-profiler
 pip install -e .
 ```
 
-## Basic Usage
+### Basic Usage
 
 ```python
 from atlas_profiler import process_dataset
 
+# Profile a CSV file
 metadata = process_dataset("data.csv")
-```
 
-`process_dataset` also accepts a pandas DataFrame:
-
-```python
+# Or profile a pandas DataFrame
+import pandas as pd
+df = pd.read_csv("data.csv")
 metadata = process_dataset(
     df,
     geo_classifier=True,
     geo_classifier_threshold=0.5,
     coverage=True,
-    plots=False,
-    include_sample=False,
 )
 ```
 
-Key parameters:
+## Documentation
+
+For comprehensive guides, API reference, examples, and advanced configuration, visit the **[Complete Documentation](https://atlas-profiler.readthedocs.io/en/latest/)**.
+
+## Table of Contents
+
+- [Features](#features)
+- [What It Produces](#what-it-produces)
+- [Type System](#type-system)
+- [Architecture](#architecture)
+  - [Pipeline](#pipeline)
+  - [Spatial ML Classifier](#spatial-ml-classifier)
+- [Advanced Usage](#advanced-usage)
+  - [Configuration Parameters](#configuration-parameters)
+  - [Manual Annotations](#manual-annotations)
+  - [Model Files](#model-files)
+- [Project Structure](#project-structure)
+- [Related Projects](#related-projects)
+
+## Features
+
+✨ **Automatic Type Detection**: Identifies structural types (Integer, Float, Text, Boolean, GeoCoordinates, GeoShape) and semantic types (DateTime, Address, URL, ID, etc.)
+
+🌍 **Spatial Intelligence**: ML-powered spatial column classifier trained on synthetic data, recognizing coordinates, addresses, geospatial identifiers, and administrative areas
+
+⏰ **Temporal Analysis**: Detects and analyzes temporal columns with coverage and resolution information
+
+📊 **Rich Metadata**: Comprehensive dataset profiling including:
+- Column-level statistics and distinct value counts
+- Dataset-level type summaries
+- Spatial and temporal coverage information
+- Optional histograms and sample data
+- Profiling performance metrics
+
+## What It Produces
+
+`process_dataset(...)` returns a metadata dictionary with:
+
+- **Dataset metrics**: row count, column count, profiled row count
+- **Per-column analysis**: structural type, semantic types, missing value ratios, distinct counts, sample values
+- **Dataset summary**: numerical, categorical, spatial, and temporal type counts
+- **Coverage information**: spatial bounding boxes, temporal ranges, geohash coverage
+- **Attribute keywords**: automatically extracted from column names
+- **Performance metrics**: per-step profiling timings
+
+## Type System
+
+### Structural Types
+
+The profiler recognizes these broad structural types:
+
+| Type | Meaning |
+| --- | --- |
+| `Integer` | Integer-like values |
+| `Float` | Floating point values |
+| `Text` | String/text values |
+| `Boolean` | Boolean-like values (true/false, yes/no, 0/1) |
+| `GeoCoordinates` | Point geometry or coordinate-pair strings |
+| `GeoShape` | Polygon-like geometry |
+| `MissingData` | Empty column |
+
+### Semantic Types
+
+The profiler also annotates semantic meaning when evidence is available:
+
+| Type | Examples |
+| --- | --- |
+| `DateTime` | Dates, timestamps, year columns |
+| `latitude`, `longitude` | Coordinate columns (paired after profiling) |
+| `address`, `AdministrativeArea` | Address text or admin areas (optionally resolved via Nominatim or `datamart_geo`) |
+| `URL`, `FileName`, `identifier`, `Enumeration` | URLs, file paths, IDs, categorical values |
+
+## Architecture
+
+### Pipeline
+
+`process_dataset` executes a consistent workflow for every dataset:
+
+1. **Load data** from path, file object, or DataFrame
+2. **Compute statistics** on full data and collect sample values per column
+3. **Predict spatial labels** (optional) using batch ML inference
+4. **Process columns** with geo predictions or rule-based type detection
+5. **Pair lat/long columns** and compute dataset-level type summaries
+6. **Compute coverage** (optional) for numerical, spatial, and temporal ranges
+
+### Spatial ML Classifier
+
+When `geo_classifier=True`, Atlas Profiler uses a `HybridGeoClassifier` that:
+
+- Samples values from each column
+- Predicts spatial labels in a single batch
+- Validates predictions using rule-based checks
+- Maps predictions to the profiler's type system
+
+**Supported spatial labels:**
+
+| Label Family | Mapped Type |
+| --- | --- |
+| `latitude`, `longitude` | Float + semantic types |
+| `x_coord`, `y_coord` | Projected coordinates |
+| `point`, `polygon`, `line` | Geometry types |
+| `address`, `zip5`, `zip9` | Address/postal codes |
+| `borough`, `city`, `state`, `country` | Administrative areas |
+| `bbl`, `bin` | NYC spatial identifiers |
+| `non_spatial` | Falls back to standard detection |
+
+Manual annotations take precedence over ML predictions. Low-confidence or rejected predictions fall back to rule-based detection.
+
+## Advanced Usage
+
+### Configuration Parameters
+
+Key parameters for `process_dataset()`:
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `data` | required | Path, file-like object, or pandas DataFrame. |
-| `geo_classifier` | `True` | Enable the default hybrid spatial classifier, disable with `False`, or pass a classifier instance. |
-| `geo_classifier_threshold` | `0.5` | Confidence cutoff for spatial ML predictions. |
-| `coverage` | `True` | Compute numerical ranges plus spatial/temporal coverage. |
-| `plots` | `False` | Add compact histogram-style plot data to column metadata. |
-| `include_sample` | `False` | Include a small deterministic CSV sample in the output. |
-| `indexes` | `True` | Preserve non-default DataFrame indexes as columns. |
-| `load_max_size` | `5000000` | Target bytes to profile; larger inputs are sampled. |
-| `metadata` | `None` | Optional seed metadata, including manual annotations. |
-| `nominatim` | `None` | Optional Nominatim endpoint for resolving address strings. |
-| `datamart_geo_data` | `None` | `True` or a `datamart_geo.GeoData` instance for administrative-area resolution. |
+| `data` | required | Path, file-like object, or pandas DataFrame |
+| `geo_classifier` | `True` | Enable spatial ML classifier |
+| `geo_classifier_threshold` | `0.5` | Confidence cutoff for predictions |
+| `coverage` | `True` | Compute numerical ranges and spatial/temporal coverage |
+| `plots` | `False` | Include histogram-style plot data |
+| `include_sample` | `False` | Include sample rows in output |
+| `indexes` | `True` | Preserve DataFrame indexes as columns |
+| `load_max_size` | `5000000` | Target bytes to profile (larger inputs are sampled) |
+| `metadata` | `None` | Optional seed metadata with manual annotations |
+| `nominatim` | `None` | Nominatim endpoint for address resolution |
+| `datamart_geo_data` | `None` | GeoData instance for admin-area resolution |
 
-## Manual Annotations
+### Manual Annotations
 
-Manual annotations can be supplied through the `metadata` argument. They are useful when a user or upstream discovery step already knows a column's type. Manually annotated columns skip the spatial ML classifier and are reconciled with observed values during normal column processing.
+Supply manual type annotations through the `metadata` argument. Useful when upstream processes or domain knowledge already identifies column types:
 
-## Model Files
+```python
+metadata = {
+    "columns": [
+        {
+            "name": "latitude",
+            "semantic_types": ["http://schema.org/latitude"]
+        },
+        {
+            "name": "longitude", 
+            "semantic_types": ["http://schema.org/longitude"]
+        }
+    ]
+}
 
-`GeoClassifier()` first looks for bundled model files under `profiler/model/`. If they are not present, it uses a user cache directory and downloads missing files when `auto_download=True`.
+result = process_dataset(df, metadata=metadata)
+```
 
-Required model files:
+Manually annotated columns skip the spatial ML classifier and are reconciled with observed values during processing.
 
-- `model.pt`
-- `config.json`
-- `label_encoder.json`
+### Model Files
 
-CTA model training, synthetic data generation, and standalone CTA inference are documented in [`training/README.md`](training/README.md).
+The spatial ML classifier uses these model files (automatically downloaded if missing):
+
+- `model.pt` — PyTorch model weights
+- `config.json` — Model configuration
+- `label_encoder.json` — Label encoding
+
+Files are cached locally and `auto_download=True` enables automatic retrieval.
+
+For model training details, see [`training/README.md`](training/README.md).
 
 ## Project Structure
 
-```text
+```
 atlas-profiler/
-├── atlas_profiler/          # Public import shim: from atlas_profiler import process_dataset
-├── profiler/                # Runtime profiling package
-│   ├── core.py              # process_dataset, loading, column pipeline, coverage
-│   ├── profile_types.py     # Rule-based structural/semantic type detection
-│   ├── spatial.py           # Spatial coverage, geohashing, GeoClassifier integration
-│   ├── temporal.py          # Date parsing and temporal resolution
-│   ├── numerical.py         # Numeric summaries and ranges
+├── atlas_profiler/          # Public API: from atlas_profiler import process_dataset
+├── profiler/                # Core profiling package
+│   ├── core.py              # process_dataset(), data loading, column pipeline
+│   ├── profile_types.py     # Rule-based type detection
+│   ├── spatial.py           # Spatial coverage & GeoClassifier
+│   ├── temporal.py          # Temporal analysis
+│   ├── numerical.py         # Numerical profiling
 │   └── types.py             # Type constants
-├── training/                # CTA data generation, model training, standalone inference
+├── training/                # Model training & synthetic data generation
 ├── tests/                   # Unit tests
 ├── examples/                # Example notebooks
-├── README.md
-└── pyproject.toml
+├── docs/                    # Sphinx documentation
+└── pyproject.toml           # Project configuration
 ```
 
-## Relationship To Datamart Profiler
+## Related Projects
 
-This project reuses the structure and main profiling logic of Datamart Profiler, with additional spatial CTA model integration.
+This project builds upon and extends [Datamart Profiler](https://gitlab.com/ViDA-NYU/auctus/auctus) with additional spatial intelligence via ML-assisted column type classification.
 
-Credits:
+- **Datamart Profiler**: https://pypi.org/project/datamart-profiler/
+- **Research Background**: Developed by the [NYU Visualization and Data Analytics Lab](https://vida-nyu.github.io/)
 
-- Datamart Profiler codebase: https://gitlab.com/ViDA-NYU/auctus/auctus
-- Datamart Profiler on PyPI: https://pypi.org/project/datamart-profiler/
+## License
+
+Atlas Profiler is released under the [MIT License](LICENSE).

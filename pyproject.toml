@@ -35,9 +35,6 @@ dependencies = [
 docs = [
     "sphinx>=4.0",
     "sphinx-book-theme",
-    "sphinx.ext.autodoc",
-    "sphinx.ext.napoleon",
-    "sphinx.ext.viewcode",
 ]
 
 [tool.setuptools.packages.find]
