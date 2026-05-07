@@ -1,4 +1,5 @@
 pandas
+polars
 python-dotenv
 transformers
 torch

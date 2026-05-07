@@ -18,11 +18,13 @@ from .spatial import (
     nominatim_resolve_all,
     pair_latlong_columns,
     get_spatial_ranges,
+    SPATIAL_RANGE_DELTA_LAT,
+    SPATIAL_RANGE_DELTA_LONG,
     parse_wkt_column,
     GeoClassifier,
     HybridGeoClassifier,
 )
-from .temporal import get_temporal_resolution
+from .temporal import get_temporal_resolution, parse_date
 from . import types
 
 
@@ -80,6 +82,8 @@ HEADER_CONSISTENT_ROWS = 4
 """
 
 MAX_GEOHASHES = 100
+CSV_SAMPLE_ROWS = 1000
+CSV_BATCH_ROWS = 50000
 
 
 _re_word_split = re.compile(r"\W+")
@@ -96,6 +100,12 @@ def truncate_string(s, limit=140):
             return s[: limit - 3] + "..."
         else:
             return s[:space] + "..."
+
+
+def sample_value_to_string(value):
+    if isinstance(value, (float, numpy.floating)):
+        return f"{float(value):.6f}".rstrip("0").rstrip(".")
+    return str(value).strip()
 
 
 DELIMITERS = set(string.punctuation) | set(string.whitespace)
@@ -136,6 +146,197 @@ class NoOpContext:
         return False
 
 
+def _scan_csv(pl, path, sep, nrows=None):
+    return pl.scan_csv(
+        path,
+        separator=sep,
+        infer_schema=False,
+        missing_utf8_is_empty_string=True,
+        low_memory=True,
+        rechunk=False,
+        n_rows=nrows,
+    )
+
+
+def _collect_streaming(lazy_frame):
+    return lazy_frame.collect(engine="streaming")
+
+
+def _polars_to_pandas(frame):
+    return pandas.DataFrame(frame.to_dict(as_series=False))
+
+
+def _csv_column_stats(pl, path, sep, column):
+    scan = _scan_csv(pl, path, sep)
+    value = pl.col(column).str.strip_chars()
+    value = pl.when(value.is_null() | (value == "")).then(None).otherwise(value)
+    numeric = value.cast(pl.Float64, strict=False)
+
+    stats = _collect_streaming(
+        scan.select(
+            value.filter(value.is_not_null())
+            .approx_n_unique()
+            .alias("num_distinct_values"),
+            numeric.count().alias("num_numeric_values"),
+            numeric.min().alias("min"),
+            numeric.max().alias("max"),
+            numeric.mean().alias("mean"),
+            numeric.std(ddof=0).alias("stddev"),
+            value.filter(value.is_not_null())
+            .head(CSV_SAMPLE_ROWS)
+            .implode()
+            .alias("sample_values"),
+        )
+    ).row(0, named=True)
+
+    sample_values = []
+    seen = set()
+    for item in stats["sample_values"] or []:
+        item = sample_value_to_string(item)
+        if item and item not in seen:
+            seen.add(item)
+            sample_values.append(item)
+            if len(sample_values) == 3:
+                break
+
+    stats["num_distinct_values"] = int(stats["num_distinct_values"] or 0)
+    stats["num_distinct_values_is_approximate"] = True
+    stats["sample_values"] = sample_values
+    return stats
+
+
+def _load_csv_path(data, load_max_size):
+    try:
+        import polars as pl
+    except ImportError as exc:
+        raise ImportError(
+            "Polars is required to profile CSV/TSV paths. Install project dependencies first."
+        ) from exc
+
+    path = str(data)
+    if not os.path.exists(path):
+        raise ValueError("data file does not exist")
+
+    metadata = {"size": os.path.getsize(path)}
+    metadata["_csv_path"] = path
+    logger.info("File size: %r bytes", metadata["size"])
+
+    sep = "\t" if path.endswith(".tsv") else ","
+    metadata["_csv_sep"] = sep
+    scan = _scan_csv(pl, path, sep)
+    column_names = scan.collect_schema().names()
+    metadata["nb_rows"] = int(
+        _collect_streaming(scan.select(pl.len().alias("rows"))).item()
+    )
+
+    full_data_stats = {
+        column: _csv_column_stats(pl, path, sep, column) for column in column_names
+    }
+
+    nrows = None
+    sample = None
+    if metadata["size"] > load_max_size and metadata["nb_rows"]:
+        sample_rows = min(CSV_SAMPLE_ROWS, metadata["nb_rows"])
+        sample = _polars_to_pandas(
+            _collect_streaming(_scan_csv(pl, path, sep, sample_rows))
+        )
+        avg_row_size = sample.memory_usage(deep=True).sum() / max(len(sample), 1)
+        nrows = max(1, min(metadata["nb_rows"], int(load_max_size / avg_row_size)))
+        logger.info(
+            "Large file, loading %d of %d rows after preliminary profiling",
+            nrows,
+            metadata["nb_rows"],
+        )
+
+    if sample is not None and nrows <= len(sample):
+        data = sample.head(nrows)
+    else:
+        data = _polars_to_pandas(_collect_streaming(_scan_csv(pl, path, sep, nrows)))
+
+    return data, metadata, column_names, full_data_stats
+
+
+def _csv_latlong_coverage(path, sep, col_lat, col_long):
+    import polars as pl
+
+    lat = pl.col(col_lat.name).cast(pl.Float64, strict=False).alias("_lat")
+    long = pl.col(col_long.name).cast(pl.Float64, strict=False).alias("_long")
+    scan = _scan_csv(pl, path, sep).select(lat, long).filter(
+        pl.col("_lat").is_between(-90.0, 90.0, closed="none")
+        & pl.col("_long").is_between(-180.0, 180.0, closed="none")
+    )
+
+    builder = Geohasher(number=MAX_GEOHASHES)
+    count = 0
+    min_lat = min_long = float("inf")
+    max_lat = max_long = float("-inf")
+
+    for batch in scan.collect_batches(chunk_size=CSV_BATCH_ROWS, engine="streaming"):
+        values = batch.select("_lat", "_long").to_numpy()
+        if not len(values):
+            continue
+        builder.add_points(values)
+        count += len(values)
+        min_lat = min(min_lat, float(batch["_lat"].min()))
+        max_lat = max(max_lat, float(batch["_lat"].max()))
+        min_long = min(min_long, float(batch["_long"].min()))
+        max_long = max(max_long, float(batch["_long"].max()))
+
+    if not count:
+        return None
+
+    if min_long == max_long:
+        min_long -= SPATIAL_RANGE_DELTA_LONG
+        max_long += SPATIAL_RANGE_DELTA_LONG
+    if min_lat == max_lat:
+        min_lat -= SPATIAL_RANGE_DELTA_LAT
+        max_lat += SPATIAL_RANGE_DELTA_LAT
+
+    return {
+        "type": "latlong",
+        "column_names": [col_lat.name, col_long.name],
+        "column_indexes": [col_lat.index, col_long.index],
+        "geohashes4": builder.get_hashes_json(),
+        "ranges": [
+            {
+                "range": {
+                    "type": "envelope",
+                    "coordinates": [[min_long, max_lat], [max_long, min_lat]],
+                }
+            }
+        ],
+        "number": count,
+    }
+
+
+def _csv_temporal_minmax(path, sep, column):
+    import polars as pl
+
+    scan = _scan_csv(pl, path, sep).select(pl.col(column))
+    min_dt = max_dt = None
+    count = 0
+
+    for batch in scan.collect_batches(chunk_size=CSV_BATCH_ROWS, engine="streaming"):
+        for value in batch[column].to_list():
+            dt = parse_date(str(value).strip())
+            if dt is None:
+                continue
+            count += 1
+            if min_dt is None or dt < min_dt:
+                min_dt = dt
+            if max_dt is None or dt > max_dt:
+                max_dt = dt
+
+    if not count:
+        return None
+    return min_dt, max_dt
+
+
+def _drop_internal_metadata(metadata):
+    metadata.pop("_csv_path", None)
+    metadata.pop("_csv_sep", None)
+
+
 def load_data(data, load_max_size=None, indexes=True):
     """Load data from file path, file object, or DataFrame.
 
@@ -149,30 +350,9 @@ def load_data(data, load_max_size=None, indexes=True):
 
     # Step 1: Convert file path/file object to DataFrame
     if isinstance(data, (str, bytes)):
-        path = str(data)
-        if not os.path.exists(path):
-            raise ValueError("data file does not exist")
-
-        metadata["size"] = os.path.getsize(path)
-        logger.info("File size: %r bytes", metadata["size"])
-
-        # Detect separator from extension
-        sep = "\t" if path.endswith(".tsv") else ","
-
-        # For large files, estimate rows to load based on target size
-        nrows = None
-        if metadata["size"] > load_max_size:
-            # Sample first 1000 rows to estimate average row size
-            sample_df = pandas.read_csv(
-                path, dtype=str, na_filter=False, sep=sep, nrows=1000
-            )
-            avg_row_size = (
-                metadata["size"] / (len(sample_df) + 1) if len(sample_df) > 0 else 100
-            )
-            nrows = int(load_max_size / avg_row_size)
-            logger.info("Large file, loading ~%d rows (estimated)", nrows)
-
-        data = pandas.read_csv(path, dtype=str, na_filter=False, sep=sep, nrows=nrows)
+        data, metadata, column_names, full_data_stats = _load_csv_path(
+            data, load_max_size
+        )
 
     elif hasattr(data, "read"):
         # File object
@@ -193,31 +373,32 @@ def load_data(data, load_max_size=None, indexes=True):
     ):
         data = data.reset_index()
 
-    metadata["nb_rows"] = len(data)
+    metadata.setdefault("nb_rows", len(data))
     logger.info("DataFrame: %d rows, %d columns", data.shape[0], data.shape[1])
 
-    # Compute stats on data before sampling (cheap operations)
-    # Also extract 3 non-null sample values for geo classifier
-    for col in data.columns:
-        # Count distinct values
-        full_data_stats[col] = {"num_distinct_values": data[col].nunique()}
+    if not full_data_stats:
+        # Compute stats on data before sampling (cheap operations)
+        # Also extract 3 non-null sample values for geo classifier
+        for col in data.columns:
+            # Count distinct values
+            full_data_stats[col] = {"num_distinct_values": data[col].nunique()}
 
-        # Extract 3 unique non-null sample values from full dataset
-        sample_values = []
-        seen = set()
-        col_series = data[col]
-        for v in col_series:
-            v_str = str(v).strip()
-            if v_str and v_str not in ("", "nan", "None") and v_str not in seen:
-                seen.add(v_str)
-                sample_values.append(v_str)
-                if len(sample_values) >= 3:
-                    break
-        full_data_stats[col]["sample_values"] = sample_values
+            # Extract 3 unique non-null sample values from full dataset
+            sample_values = []
+            seen = set()
+            col_series = data[col]
+            for v in col_series:
+                v_str = sample_value_to_string(v)
+                if v_str and v_str not in ("", "nan", "None") and v_str not in seen:
+                    seen.add(v_str)
+                    sample_values.append(v_str)
+                    if len(sample_values) >= 3:
+                        break
+            full_data_stats[col]["sample_values"] = sample_values
 
     # Sample if DataFrame exceeds target size
     avg_row_size = data.memory_usage(deep=True).sum() / max(len(data), 1)
-    max_rows = int(load_max_size / avg_row_size)
+    max_rows = max(1, int(load_max_size / avg_row_size))
     if len(data) > max_rows:
         logger.info(
             "Sampling %d rows for profiling (target size: %d bytes)",
@@ -554,6 +735,8 @@ def process_dataset(
     )
 
     metadata.update(file_metadata)
+    csv_path = metadata.get("_csv_path")
+    csv_sep = metadata.get("_csv_sep")
     metadata["nb_profiled_rows"] = data.shape[0]
     metadata["nb_columns"] = data.shape[1]
 
@@ -574,6 +757,7 @@ def process_dataset(
     if data.shape[0] == 0:
         logger.info("0 rows, returning early")
         metadata["types"] = []
+        _drop_internal_metadata(metadata)
         return metadata
 
     # Get manual updates from the user
@@ -691,12 +875,22 @@ def process_dataset(
         )
         resolved_columns[col_idx] = resolved
 
-        # Override with exact stats from full data (computed before sampling)
+        # Override with full-file stats computed before sampling.
         col_name = column_meta["name"]
         if col_name in full_data_stats:
             stats = full_data_stats[col_name]
             if "num_distinct_values" in column_meta:
                 column_meta["num_distinct_values"] = stats["num_distinct_values"]
+                if stats.get("num_distinct_values_is_approximate"):
+                    column_meta["num_distinct_values_is_approximate"] = True
+            if (
+                column_meta["structural_type"] in (types.INTEGER, types.FLOAT)
+                and stats.get("num_numeric_values")
+            ):
+                column_meta["min"] = stats["min"]
+                column_meta["max"] = stats["max"]
+                column_meta["mean"] = stats["mean"]
+                column_meta["stddev"] = stats["stddev"]
 
     step_times["3_process_columns"] = time.perf_counter() - step_start
     logger.info(
@@ -783,6 +977,12 @@ def process_dataset(
         with NoOpContext():
             # Compute sketches from lat/long pairs
             for col_lat, col_long in latlong_pairs:
+                if csv_path is not None:
+                    cov = _csv_latlong_coverage(csv_path, csv_sep, col_lat, col_long)
+                    if cov is not None:
+                        spatial_coverage.append(cov)
+                    continue
+
                 lat_values = data.iloc[:, col_lat.index]
                 lat_values = pandas.to_numeric(lat_values, errors="coerce")
                 long_values = data.iloc[:, col_long.index]
@@ -997,8 +1197,23 @@ def process_dataset(
                     len(datetimes),
                 )
 
-                # Get temporal ranges
-                ranges = get_numerical_ranges(timestamps)
+                full_minmax = (
+                    _csv_temporal_minmax(csv_path, csv_sep, col["name"])
+                    if csv_path is not None
+                    else None
+                )
+                if full_minmax is None:
+                    ranges = get_numerical_ranges(timestamps)
+                else:
+                    min_dt, max_dt = full_minmax
+                    ranges = [
+                        {
+                            "range": {
+                                "gte": min_dt.timestamp(),
+                                "lte": max_dt.timestamp(),
+                            }
+                        }
+                    ]
                 if not ranges:
                     continue
 
@@ -1086,4 +1301,5 @@ def process_dataset(
         "total": total_time,
     }
 
+    _drop_internal_metadata(metadata)
     return metadata
