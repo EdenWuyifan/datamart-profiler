@@ -541,7 +541,7 @@ def process_column(
         resolved["datetimes"] = datetimes
         timestamps = numpy.empty(
             len(datetimes),
-            dtype="float32",
+            dtype="float64",
         )
         for j, dt in enumerate(datetimes):
             timestamps[j] = dt.timestamp()
