@@ -568,7 +568,7 @@ def process_column(
             }
 
     # Compute histogram from categorical values
-    if plots and types.CATEGORICAL in semantic_types_dict:
+    if plots and types.CATEGORICAL in semantic_types_dict and "plot" not in column_meta:
         counter = collections.Counter()
         for value in array:
             if not value:
